@@ -1,0 +1,12 @@
+import 'dotenv/config';
+import { buildApp } from './app';
+
+const PORT = parseInt(process.env.PORT ?? '3000', 10);
+
+buildApp().then((fastify) => {
+  fastify.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
+    if (err) { fastify.log.error(err); process.exit(1); }
+    fastify.log.info(`🚀 {{APP_NAME}} running on http://localhost:${PORT}`);
+    fastify.log.info(`📖 Swagger UI: http://localhost:${PORT}/docs`);
+  });
+});
