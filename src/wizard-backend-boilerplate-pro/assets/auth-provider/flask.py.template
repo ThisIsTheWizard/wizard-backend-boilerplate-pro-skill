@@ -1,0 +1,180 @@
+"""
+Auth provider bootstrap for Flask — {{AUTH}}
+Place this file at: app/auth/provider.py
+"""
+
+import os
+from functools import wraps
+from flask import request, jsonify, g
+
+
+def _get_bearer() -> str | None:
+    header = request.headers.get("Authorization", "")
+    parts = header.split("Bearer ")
+    return parts[1] if len(parts) == 2 else None
+
+
+# ─── JWT (custom) ─────────────────────────────────────────────────────────────
+# @if AUTH == jwt
+# pip install PyJWT passlib[bcrypt]
+import jwt
+from datetime import datetime, timedelta, timezone
+
+JWT_SECRET = os.environ["JWT_SECRET"]
+JWT_ALGORITHM = "HS256"
+
+
+def create_access_token(user_id: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    return jwt.encode({"sub": user_id, "exp": expire}, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def create_refresh_token(user_id: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(days=7)
+    return jwt.encode({"sub": user_id, "type": "refresh", "exp": expire}, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = _get_bearer()
+        if not token:
+            return jsonify({"error": "Missing token"}), 401
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            g.user_id = payload["sub"]
+        except jwt.PyJWTError:
+            return jsonify({"error": "Invalid or expired token"}), 401
+        return f(*args, **kwargs)
+    return decorated
+# @endif
+
+# ─── API Key ──────────────────────────────────────────────────────────────────
+# @if AUTH == apikey
+import hashlib, secrets
+
+
+def generate_api_key() -> tuple[str, str]:
+    raw = f"ak_{secrets.token_hex(24)}"
+    hashed = hashlib.sha256(raw.encode()).hexdigest()
+    return raw, hashed
+
+
+def api_key_auth(lookup_fn):
+    """
+    lookup_fn(hashed: str) -> Optional[dict] — implement per your ORM.
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            key = request.headers.get("X-Api-Key")
+            if not key:
+                return jsonify({"error": "Missing X-Api-Key header"}), 401
+            hashed = hashlib.sha256(key.encode()).hexdigest()
+            record = lookup_fn(hashed)
+            if not record:
+                return jsonify({"error": "Invalid API key"}), 401
+            g.user_id = record["userId"]
+            return f(*args, **kwargs)
+        return decorated
+    return decorator
+# @endif
+
+# ─── Session ──────────────────────────────────────────────────────────────────
+# @if AUTH == session
+# pip install Flask-Session
+# In app factory:
+#   from flask_session import Session
+#   app.config["SESSION_TYPE"] = "sqlalchemy"  # or "redis", "filesystem"
+#   app.config["SECRET_KEY"] = os.environ["SESSION_SECRET"]
+#   Session(app)
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        from flask import session as flask_session
+        if not flask_session.get("user_id"):
+            return jsonify({"error": "Not authenticated"}), 401
+        g.user_id = flask_session["user_id"]
+        return f(*args, **kwargs)
+    return decorated
+# @endif
+
+# ─── Clerk ────────────────────────────────────────────────────────────────────
+# @if AUTH == clerk
+# pip install clerk-backend-api
+from clerk_backend_api import Clerk
+from clerk_backend_api.jwks_helpers import authenticate_request, AuthenticateRequestOptions
+
+_clerk = Clerk(bearer_auth=os.environ["CLERK_SECRET_KEY"])
+
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        state = authenticate_request(
+            request,
+            AuthenticateRequestOptions(
+                authorized_parties=[os.environ.get("CLERK_PUBLISHABLE_KEY", "")]
+            ),
+        )
+        if not state.is_signed_in:
+            return jsonify({"error": "Unauthorized"}), 401
+        g.clerk_payload = state.payload
+        return f(*args, **kwargs)
+    return decorated
+# @endif
+
+# ─── Auth0 ────────────────────────────────────────────────────────────────────
+# @if AUTH == auth0
+# pip install python-jose[cryptography]
+from jose import jwt, JWTError
+import urllib.request, json
+
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = _get_bearer()
+        if not token:
+            return jsonify({"error": "Missing token"}), 401
+        with urllib.request.urlopen(
+            f"https://{os.environ['AUTH0_DOMAIN']}/.well-known/jwks.json"
+        ) as r:
+            jwks = json.loads(r.read())
+        try:
+            g.jwt_payload = jwt.decode(
+                token, jwks, algorithms=["RS256"],
+                audience=os.environ["AUTH0_AUDIENCE"],
+                issuer=f"https://{os.environ['AUTH0_DOMAIN']}/",
+            )
+        except JWTError as e:
+            return jsonify({"error": str(e)}), 401
+        return f(*args, **kwargs)
+    return decorated
+# @endif
+
+# ─── Supabase Auth ────────────────────────────────────────────────────────────
+# @if AUTH == supabase
+# pip install supabase
+from supabase import create_client
+
+_supabase = create_client(
+    os.environ["SUPABASE_URL"],
+    os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+)
+
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = _get_bearer()
+        if not token:
+            return jsonify({"error": "Missing token"}), 401
+        response = _supabase.auth.get_user(token)
+        if not response.user:
+            return jsonify({"error": "Invalid token"}), 401
+        g.user = response.user
+        return f(*args, **kwargs)
+    return decorated
+# @endif

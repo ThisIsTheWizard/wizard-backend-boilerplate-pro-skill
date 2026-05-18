@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1
+# Multi-stage Python Dockerfile — {{APP_NAME}}
+
+# ── Stage 1: Builder ─────────────────────────────────────────────────────────
+FROM python:3.12-slim AS builder
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+RUN pip install --upgrade pip
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ── Stage 2: Production ───────────────────────────────────────────────────────
+FROM python:3.12-slim AS runner
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8000
+
+# Create non-root user
+RUN addgroup --system --gid 1001 appgroup \
+ && adduser --system --uid 1001 --ingroup appgroup appuser
+
+COPY --from=builder /install /usr/local
+COPY --chown=appuser:appgroup . .
+
+USER appuser
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+
+# FastAPI / Flask / Django — adjust as needed
+# FastAPI:
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# Django (uncomment):
+# CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4"]
+# Flask (uncomment):
+# CMD ["gunicorn", "app:create_app()", "--bind", "0.0.0.0:8000", "--workers", "4"]

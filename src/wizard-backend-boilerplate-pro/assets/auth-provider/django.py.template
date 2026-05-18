@@ -1,0 +1,140 @@
+"""
+Auth provider bootstrap for Django REST Framework — {{AUTH}}
+Place this file at: apps/auth/authentication.py
+"""
+
+import os
+from rest_framework.authentication import BaseAuthentication
+from rest_framework.exceptions import AuthenticationFailed
+
+# ─── JWT (custom) ─────────────────────────────────────────────────────────────
+# @if AUTH == jwt
+# pip install djangorestframework-simplejwt
+# In settings.py add:
+#   REST_FRAMEWORK = { 'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework_simplejwt.authentication.JWTAuthentication'] }
+#   SIMPLE_JWT = { 'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15), 'REFRESH_TOKEN_LIFETIME': timedelta(days=7) }
+#
+# In urls.py add:
+#   from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+#   path('auth/login', TokenObtainPairView.as_view()),
+#   path('auth/refresh', TokenRefreshView.as_view()),
+
+# No custom authentication.py needed — simplejwt handles it.
+# @endif
+
+# ─── API Key ──────────────────────────────────────────────────────────────────
+# @if AUTH == apikey
+import hashlib, secrets
+from django.contrib.auth.models import AnonymousUser
+
+
+def generate_api_key() -> tuple[str, str]:
+    raw = f"ak_{secrets.token_hex(24)}"
+    hashed = hashlib.sha256(raw.encode()).hexdigest()
+    return raw, hashed
+
+
+class ApiKeyAuthentication(BaseAuthentication):
+    """
+    Reads X-Api-Key header and validates against ApiKey model.
+    Create an ApiKey model with: user (FK), hashed_key (str), is_active (bool).
+    """
+    def authenticate(self, request):
+        key = request.META.get("HTTP_X_API_KEY")
+        if not key:
+            return None
+        hashed = hashlib.sha256(key.encode()).hexdigest()
+        from apps.auth.models import ApiKey  # adjust import
+        try:
+            api_key = ApiKey.objects.select_related("user").get(hashed_key=hashed, is_active=True)
+        except ApiKey.DoesNotExist:
+            raise AuthenticationFailed("Invalid API key")
+        return (api_key.user, None)
+# @endif
+
+# ─── Session ──────────────────────────────────────────────────────────────────
+# @if AUTH == session
+# Django uses session auth by default via SessionAuthentication.
+# In settings.py:
+#   REST_FRAMEWORK = {
+#     'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'],
+#   }
+#   SESSION_COOKIE_AGE = 60 * 60 * 24 * 7  # 7 days
+#   SESSION_COOKIE_HTTPONLY = True
+#   SESSION_COOKIE_SECURE = True  # production only
+# @endif
+
+# ─── Clerk ────────────────────────────────────────────────────────────────────
+# @if AUTH == clerk
+# pip install clerk-backend-api
+from clerk_backend_api import Clerk
+from clerk_backend_api.jwks_helpers import authenticate_request, AuthenticateRequestOptions
+from django.contrib.auth.models import AnonymousUser
+
+_clerk = Clerk(bearer_auth=os.environ["CLERK_SECRET_KEY"])
+
+
+class ClerkAuthentication(BaseAuthentication):
+    def authenticate(self, request):
+        from rest_framework.request import Request as DRFRequest
+        state = authenticate_request(
+            request._request if isinstance(request, DRFRequest) else request,
+            AuthenticateRequestOptions(
+                authorized_parties=[os.environ.get("CLERK_PUBLISHABLE_KEY", "")]
+            ),
+        )
+        if not state.is_signed_in:
+            return None
+        return (AnonymousUser(), state.payload)
+# @endif
+
+# ─── Auth0 ────────────────────────────────────────────────────────────────────
+# @if AUTH == auth0
+# pip install python-jose[cryptography]
+from jose import jwt, JWTError
+import urllib.request, json
+from django.contrib.auth.models import AnonymousUser
+
+
+class Auth0Authentication(BaseAuthentication):
+    def authenticate(self, request):
+        token = request.META.get("HTTP_AUTHORIZATION", "").split("Bearer ")[-1]
+        if not token:
+            return None
+        with urllib.request.urlopen(
+            f"https://{os.environ['AUTH0_DOMAIN']}/.well-known/jwks.json"
+        ) as r:
+            jwks = json.loads(r.read())
+        try:
+            payload = jwt.decode(
+                token, jwks, algorithms=["RS256"],
+                audience=os.environ["AUTH0_AUDIENCE"],
+                issuer=f"https://{os.environ['AUTH0_DOMAIN']}/",
+            )
+        except JWTError as e:
+            raise AuthenticationFailed(str(e))
+        return (AnonymousUser(), payload)
+# @endif
+
+# ─── Supabase Auth ────────────────────────────────────────────────────────────
+# @if AUTH == supabase
+# pip install supabase
+from supabase import create_client
+from django.contrib.auth.models import AnonymousUser
+
+_supabase = create_client(
+    os.environ["SUPABASE_URL"],
+    os.environ["SUPABASE_SERVICE_ROLE_KEY"],
+)
+
+
+class SupabaseAuthentication(BaseAuthentication):
+    def authenticate(self, request):
+        token = request.META.get("HTTP_AUTHORIZATION", "").split("Bearer ")[-1]
+        if not token:
+            return None
+        response = _supabase.auth.get_user(token)
+        if not response.user:
+            raise AuthenticationFailed("Invalid token")
+        return (AnonymousUser(), response.user)
+# @endif

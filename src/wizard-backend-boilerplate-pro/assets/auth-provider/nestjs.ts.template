@@ -1,0 +1,235 @@
+/**
+ * Auth provider bootstrap for NestJS — {{AUTH}}
+ *
+ * This file defines the auth guard, module, and strategy.
+ * Split into separate files in a real project:
+ *   src/auth/auth.module.ts
+ *   src/auth/auth.guard.ts
+ *   src/auth/auth.service.ts (for custom strategies)
+ */
+
+// ─── JWT (custom) ─────────────────────────────────────────────────────────────
+// @if AUTH == jwt
+// Install: $PM add @nestjs/jwt @nestjs/passport passport passport-jwt
+// Install types: $PM add -D @types/passport-jwt
+
+// src/auth/jwt.strategy.ts
+import { Injectable } from '@nestjs/common';
+import { PassportStrategy } from '@nestjs/passport';
+import { ExtractJwt, Strategy } from 'passport-jwt';
+
+@Injectable()
+export class JwtStrategy extends PassportStrategy(Strategy) {
+  constructor() {
+    super({
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      secretOrKey: process.env.JWT_SECRET!,
+      ignoreExpiration: false,
+    });
+  }
+
+  validate(payload: { sub: string }) {
+    return { userId: payload.sub };
+  }
+}
+
+// src/auth/jwt-auth.guard.ts
+import { Injectable } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+@Injectable()
+export class JwtAuthGuard extends AuthGuard('jwt') {}
+
+// src/auth/auth.module.ts
+import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+
+@Module({
+  imports: [
+    PassportModule,
+    JwtModule.register({
+      secret: process.env.JWT_SECRET!,
+      signOptions: { expiresIn: '15m' },
+    }),
+  ],
+  providers: [JwtStrategy],
+  exports: [JwtModule],
+})
+export class AuthModule {}
+// @endif
+
+// ─── API Key ──────────────────────────────────────────────────────────────────
+// @if AUTH == apikey
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import crypto from 'crypto';
+
+export function generateApiKey() {
+  const raw = `ak_${crypto.randomBytes(24).toString('hex')}`;
+  return { raw, hashed: crypto.createHash('sha256').update(raw).digest('hex') };
+}
+
+// Inject your ApiKeyService to do the DB lookup
+@Injectable()
+export class ApiKeyAuthGuard implements CanActivate {
+  constructor(private readonly apiKeyService: ApiKeyService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    const key = request.headers['x-api-key'];
+    if (!key) throw new UnauthorizedException('Missing X-Api-Key header');
+    const hashed = crypto.createHash('sha256').update(key).digest('hex');
+    const record = await this.apiKeyService.findByHash(hashed);
+    if (!record) throw new UnauthorizedException('Invalid API key');
+    request.userId = record.userId;
+    return true;
+  }
+}
+
+// Placeholder — implement with your ORM
+abstract class ApiKeyService {
+  abstract findByHash(hashed: string): Promise<{ userId: string } | null>;
+}
+// @endif
+
+// ─── Session ──────────────────────────────────────────────────────────────────
+// @if AUTH == session
+// Install: $PM add express-session @types/express-session connect-pg-simple
+import { NestMiddleware, Injectable } from '@nestjs/common';
+import { CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import session from 'express-session';
+
+// Register in main.ts:
+//   app.use(session({ secret: process.env.SESSION_SECRET, resave: false, saveUninitialized: false }))
+
+@Injectable()
+export class SessionAuthGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest();
+    if (!request.session?.userId) throw new UnauthorizedException();
+    return true;
+  }
+}
+// @endif
+
+// ─── better-auth ─────────────────────────────────────────────────────────────
+// @if AUTH == better-auth
+import { Module, MiddlewareConsumer, RequestMethod, NestMiddleware, Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { betterAuth } from 'better-auth';
+import { prismaAdapter } from 'better-auth/adapters/prisma';
+import { toNodeHandler } from 'better-auth/node';
+import { db } from '../db/client';
+import type { Request, Response, NextFunction } from 'express';
+
+export const auth = betterAuth({
+  database: prismaAdapter(db, { provider: '{{DB}}' as any }),
+  emailAndPassword: { enabled: true },
+});
+
+const betterAuthHandler = toNodeHandler(auth);
+
+@Injectable()
+export class BetterAuthMiddleware implements NestMiddleware {
+  use(req: Request, res: Response, next: NextFunction) {
+    betterAuthHandler(req, res, next);
+  }
+}
+
+@Module({})
+export class AuthModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(BetterAuthMiddleware).forRoutes(
+      { path: '/api/auth/*', method: RequestMethod.ALL }
+    );
+  }
+}
+
+@Injectable()
+export class BetterAuthGuard implements CanActivate {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session?.user) throw new UnauthorizedException();
+    request.user = session.user;
+    return true;
+  }
+}
+// @endif
+
+// ─── Clerk ────────────────────────────────────────────────────────────────────
+// @if AUTH == clerk
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Module } from '@nestjs/common';
+import { ClerkClientProvider, InjectClerkClient } from '@clerk/nestjs';
+import type { ClerkClient } from '@clerk/backend';
+
+@Injectable()
+export class ClerkAuthGuard implements CanActivate {
+  constructor(@InjectClerkClient() private readonly clerk: ClerkClient) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    const token = request.headers.authorization?.split('Bearer ')[1];
+    if (!token) throw new UnauthorizedException();
+    try {
+      const payload = await this.clerk.verifyToken(token);
+      request.userId = payload.sub;
+      return true;
+    } catch {
+      throw new UnauthorizedException();
+    }
+  }
+}
+
+@Module({ imports: [ClerkClientProvider] })
+export class AuthModule {}
+// @endif
+
+// ─── Auth0 ────────────────────────────────────────────────────────────────────
+// @if AUTH == auth0
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Module } from '@nestjs/common';
+import { PassportStrategy } from '@nestjs/passport';
+import { ExtractJwt, Strategy } from 'passport-jwt';
+import { passportJwtSecret } from 'jwks-rsa';
+
+@Injectable()
+export class Auth0Strategy extends PassportStrategy(Strategy) {
+  constructor() {
+    super({
+      secretOrKeyProvider: passportJwtSecret({
+        cache: true,
+        rateLimit: true,
+        jwksRequestsPerMinute: 5,
+        jwksUri: `https://${process.env.AUTH0_DOMAIN}/.well-known/jwks.json`,
+      }),
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      audience: process.env.AUTH0_AUDIENCE,
+      issuer: `https://${process.env.AUTH0_DOMAIN}/`,
+      algorithms: ['RS256'],
+    });
+  }
+
+  validate(payload: any) {
+    return { userId: payload.sub, ...payload };
+  }
+}
+// @endif
+
+// ─── Supabase Auth ────────────────────────────────────────────────────────────
+// @if AUTH == supabase
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+
+@Injectable()
+export class SupabaseAuthGuard implements CanActivate {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    const token = request.headers.authorization?.split('Bearer ')[1];
+    if (!token) throw new UnauthorizedException('Missing token');
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    if (error || !user) throw new UnauthorizedException('Invalid token');
+    request.user = user;
+    return true;
+  }
+}
+// @endif

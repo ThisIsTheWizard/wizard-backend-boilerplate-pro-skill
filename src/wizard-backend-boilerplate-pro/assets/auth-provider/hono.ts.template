@@ -1,0 +1,164 @@
+/**
+ * Auth provider bootstrap for Hono — {{AUTH}}
+ */
+
+import type { MiddlewareHandler, Context, Next } from 'hono';
+import { HTTPException } from 'hono/http-exception';
+
+// ─── JWT (custom) ─────────────────────────────────────────────────────────────
+// @if AUTH == jwt
+import { sign, verify } from 'hono/jwt';
+
+const JWT_SECRET = process.env.JWT_SECRET!;
+
+export function signAccessToken(userId: string): Promise<string> {
+  return sign({ sub: userId, exp: Math.floor(Date.now() / 1000) + 15 * 60 }, JWT_SECRET);
+}
+
+export function signRefreshToken(userId: string): Promise<string> {
+  return sign({ sub: userId, type: 'refresh', exp: Math.floor(Date.now() / 1000) + 7 * 24 * 3600 }, JWT_SECRET);
+}
+
+export const requireAuth: MiddlewareHandler = async (c, next) => {
+  const token = c.req.header('Authorization')?.split('Bearer ')[1];
+  if (!token) throw new HTTPException(401, { message: 'Missing token' });
+  try {
+    const payload = await verify(token, JWT_SECRET);
+    c.set('userId', (payload as any).sub as string);
+    await next();
+  } catch {
+    throw new HTTPException(401, { message: 'Invalid or expired token' });
+  }
+};
+// @endif
+
+// ─── API Key ──────────────────────────────────────────────────────────────────
+// @if AUTH == apikey
+import crypto from 'crypto';
+
+export function generateApiKey() {
+  const raw = `ak_${crypto.randomBytes(24).toString('hex')}`;
+  return { raw, hashed: crypto.createHash('sha256').update(raw).digest('hex') };
+}
+
+export function apiKeyAuth(
+  lookupFn: (hashed: string) => Promise<{ userId: string } | null>
+): MiddlewareHandler {
+  return async (c, next) => {
+    const key = c.req.header('X-Api-Key');
+    if (!key) throw new HTTPException(401, { message: 'Missing X-Api-Key header' });
+    const hashed = crypto.createHash('sha256').update(key).digest('hex');
+    const record = await lookupFn(hashed);
+    if (!record) throw new HTTPException(401, { message: 'Invalid API key' });
+    c.set('userId', record.userId);
+    await next();
+  };
+}
+// @endif
+
+// ─── Session ──────────────────────────────────────────────────────────────────
+// @if AUTH == session
+// Install: $PM add hono-sessions
+import { sessionMiddleware, CookieStore } from 'hono-sessions';
+
+const store = new CookieStore();
+
+export const sessionPlugin = sessionMiddleware({
+  store,
+  encryptionKey: process.env.SESSION_SECRET,
+  expireAfterSeconds: 60 * 60 * 24 * 7, // 7 days
+  cookieOptions: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'Lax',
+    path: '/',
+  },
+});
+
+export const requireAuth: MiddlewareHandler = async (c, next) => {
+  const session = c.get('session');
+  if (!session.get('userId')) throw new HTTPException(401, { message: 'Not authenticated' });
+  await next();
+};
+// @endif
+
+// ─── better-auth ─────────────────────────────────────────────────────────────
+// @if AUTH == better-auth
+import { betterAuth } from 'better-auth';
+import { prismaAdapter } from 'better-auth/adapters/prisma';
+import { db } from '../db/client';
+
+export const auth = betterAuth({
+  database: prismaAdapter(db, { provider: '{{DB}}' as any }),
+  emailAndPassword: { enabled: true },
+});
+
+// Mount: app.on(['GET','POST'], '/api/auth/*', (c) => auth.handler(c.req.raw))
+export const authHandler = (c: Context) => auth.handler(c.req.raw);
+
+export const attachSession: MiddlewareHandler = async (c, next) => {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  c.set('session', session);
+  await next();
+};
+
+export const requireAuth: MiddlewareHandler = async (c, next) => {
+  const session = c.get('session') as any;
+  if (!session?.user) throw new HTTPException(401, { message: 'Unauthorized' });
+  await next();
+};
+// @endif
+
+// ─── Clerk ────────────────────────────────────────────────────────────────────
+// @if AUTH == clerk
+// Install: $PM add @hono/clerk-auth
+import { clerkMiddleware, getAuth } from '@hono/clerk-auth';
+
+export { clerkMiddleware };
+
+export const requireAuth: MiddlewareHandler = async (c, next) => {
+  const auth = getAuth(c);
+  if (!auth?.userId) throw new HTTPException(401, { message: 'Unauthorized' });
+  await next();
+};
+// @endif
+
+// ─── Auth0 ────────────────────────────────────────────────────────────────────
+// @if AUTH == auth0
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+
+const JWKS = createRemoteJWKSet(
+  new URL(`https://${process.env.AUTH0_DOMAIN}/.well-known/jwks.json`)
+);
+
+export const requireAuth: MiddlewareHandler = async (c, next) => {
+  const token = c.req.header('Authorization')?.split('Bearer ')[1];
+  if (!token) throw new HTTPException(401, { message: 'Missing token' });
+  try {
+    const { payload } = await jwtVerify(token, JWKS, {
+      issuer: `https://${process.env.AUTH0_DOMAIN}/`,
+      audience: process.env.AUTH0_AUDIENCE!,
+    });
+    c.set('jwtPayload', payload);
+    await next();
+  } catch {
+    throw new HTTPException(401, { message: 'Invalid token' });
+  }
+};
+// @endif
+
+// ─── Supabase Auth ────────────────────────────────────────────────────────────
+// @if AUTH == supabase
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+
+export const requireAuth: MiddlewareHandler = async (c, next) => {
+  const token = c.req.header('Authorization')?.split('Bearer ')[1];
+  if (!token) throw new HTTPException(401, { message: 'Missing token' });
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  if (error || !user) throw new HTTPException(401, { message: 'Invalid token' });
+  c.set('user', user);
+  await next();
+};
+// @endif
