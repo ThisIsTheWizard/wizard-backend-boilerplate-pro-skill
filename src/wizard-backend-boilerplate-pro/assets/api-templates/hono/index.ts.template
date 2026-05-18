@@ -1,0 +1,11 @@
+import 'dotenv/config';
+import { serve } from '@hono/node-server';
+import { createApp } from './app';
+
+const PORT = parseInt(process.env.PORT ?? '3000', 10);
+const app = createApp();
+
+serve({ fetch: app.fetch, port: PORT }, () => {
+  console.log(`🚀 {{APP_NAME}} running on http://localhost:${PORT}`);
+  console.log(`📖 Swagger UI: http://localhost:${PORT}/docs`);
+});
