@@ -1,0 +1,45 @@
+{
+  "name": "wizard-backend-boilerplate-pro",
+  "displayName": "Wizard Backend Boilerplate Pro",
+  "version": "1.0.0",
+  "description": "Scaffold production-ready backend APIs with 28 wired modules, database integration, managed or custom auth, Docker, and Swagger docs — supports 9 frameworks across Node.js, Python, and Go.",
+  "author": {
+    "name": "The Wizard",
+    "email": "sheikhisthewizard@gmail.com"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/ThisIsTheWizard/wizard-backend-boilerplate-pro-skill",
+  "repository": "https://github.com/ThisIsTheWizard/wizard-backend-boilerplate-pro-skill",
+  "category": "scaffold",
+  "tags": [
+    "backend", "api", "rest", "express", "fastify", "nestjs", "hono",
+    "fastapi", "django", "flask", "gin", "echo", "prisma", "typeorm",
+    "sqlalchemy", "gorm", "jwt", "clerk", "auth0", "supabase", "better-auth",
+    "docker", "swagger", "openapi", "postgresql", "mongodb"
+  ],
+  "stats": {
+    "frameworks": 9,
+    "modules": 28,
+    "databases": 5,
+    "authStrategies": 7
+  },
+  "compatibility": {
+    "platforms": [
+      "claude",
+      "cursor",
+      "windsurf",
+      "copilot",
+      "codex",
+      "gemini",
+      "opencode",
+      "continue",
+      "roocode",
+      "kilocode",
+      "kiro",
+      "trae",
+      "warp",
+      "augment",
+      "aider"
+    ]
+  }
+}
