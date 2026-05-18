@@ -1,0 +1,18 @@
+from fastapi import APIRouter
+from app.core.config import settings
+import time
+
+router = APIRouter()
+
+_start_time = time.time()
+
+
+@router.get("/health", tags=["health"])
+async def health_check():
+    return {
+        "status": "ok",
+        "version": "1.0.0",
+        "uptime": round(time.time() - _start_time),
+        "env": settings.ENV,
+        "db": "connected",  # replace with actual DB ping if DB != none
+    }

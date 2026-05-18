@@ -1,0 +1,69 @@
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, EmailStr
+from datetime import datetime
+from uuid import UUID
+from app.auth.provider import require_auth
+
+router = APIRouter()
+
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CreateUserRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class PaginatedUsers(BaseModel):
+    data: list[UserResponse]
+    meta: dict
+
+
+@router.get("/", response_model=PaginatedUsers)
+async def list_users(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: str | None = None,
+    _user_id: str = Depends(require_auth),
+):
+    # TODO: replace with actual ORM query
+    return {"data": [], "meta": {"page": page, "page_size": page_size, "total": 0, "has_next": False}}
+
+
+@router.get("/{user_id}", response_model=UserResponse)
+async def get_user(
+    user_id: str,
+    _: str = Depends(require_auth),
+):
+    # TODO: db lookup
+    raise HTTPException(status_code=404, detail="User not found")
+
+
+@router.post("/", response_model=UserResponse, status_code=201)
+async def create_user(body: CreateUserRequest):
+    # TODO: hash password, create user
+    return {"id": "new-id", "email": body.email, "created_at": datetime.utcnow()}
+
+
+@router.put("/{user_id}", response_model=UserResponse)
+async def update_user(
+    user_id: str,
+    body: dict,
+    _: str = Depends(require_auth),
+):
+    raise HTTPException(status_code=404, detail="User not found")
+
+
+@router.delete("/{user_id}")
+async def delete_user(
+    user_id: str,
+    _: str = Depends(require_auth),
+):
+    # TODO: soft-delete
+    return {"data": {"deleted": True, "id": user_id}}
