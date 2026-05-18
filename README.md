@@ -1,4 +1,4 @@
-# wizard-backend-boilerplate-pro
+# Wizard Backend Boilerplate Pro
 
 A Claude Code skill that scaffolds production-ready backend APIs in minutes. Ask it to create a new backend project and it walks you through five questions, then builds a fully wired API with authentication, database integration, structured logging, rate limiting, and Swagger docs — ready to `docker compose up`.
 
