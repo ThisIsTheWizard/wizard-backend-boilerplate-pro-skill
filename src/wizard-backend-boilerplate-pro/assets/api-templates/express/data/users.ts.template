@@ -1,0 +1,72 @@
+import { Router } from 'express';
+import { requireAuth } from '../auth/provider';
+import { paginate } from '../lib/pagination';
+import { createError } from '../core/errorHandler';
+
+const router = Router();
+
+// GET /users?page=1&pageSize=20&search=alice
+router.get('/', requireAuth, async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page as string ?? '1', 10);
+    const pageSize = parseInt(req.query.pageSize as string ?? '20', 10);
+    const search = req.query.search as string | undefined;
+
+    // TODO: replace with actual ORM query
+    const data: unknown[] = [];
+    const total = 0;
+
+    res.json(paginate(data, total, page, pageSize));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /users/:id
+router.get('/:id', requireAuth, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    // TODO: db.user.findUnique({ where: { id } })
+    const user = null;
+    if (!user) return next(createError('User not found', 404, 'NOT_FOUND'));
+    res.json({ data: user });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /users
+router.post('/', async (req, res, next) => {
+  try {
+    const { email, password } = req.body as { email: string; password: string };
+    if (!email || !password) return next(createError('email and password are required', 400, 'VALIDATION_ERROR'));
+    // TODO: hash password, create user
+    res.status(201).json({ data: { id: 'new-id', email } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /users/:id
+router.put('/:id', requireAuth, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    // TODO: verify ownership, update user
+    res.json({ data: { id, ...req.body } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /users/:id
+router.delete('/:id', requireAuth, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    // TODO: soft-delete user
+    res.json({ data: { deleted: true, id } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+export default router;
