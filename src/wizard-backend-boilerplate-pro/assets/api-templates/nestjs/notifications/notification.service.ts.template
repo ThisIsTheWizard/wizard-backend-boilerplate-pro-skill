@@ -1,0 +1,53 @@
+import { Injectable, Logger } from '@nestjs/common';
+import Handlebars from 'handlebars';
+
+/**
+ * Notification service — console-log stub for development.
+ *
+ * To send real emails, replace the stub block with:
+ *   - AWS SES:   SESClient + SendEmailCommand (@aws-sdk/client-ses)
+ *   - SendGrid:  @sendgrid/mail
+ *   - Resend:    resend
+ *   - Postmark:  postmark
+ *
+ * Required env var when using a real provider: FROM_EMAIL
+ */
+
+interface SendNotificationParams {
+  event: string;
+  to: string;
+  data: Record<string, unknown>;
+}
+
+interface AuthTemplate {
+  subject: string;
+  body: string;
+}
+
+@Injectable()
+export class NotificationService {
+  private readonly logger = new Logger(NotificationService.name);
+
+  async send({ event, to, data }: SendNotificationParams): Promise<void> {
+    // TODO: fetch template from DB: prisma.authTemplate.findUnique({ where: { event } })
+    const template: AuthTemplate | null = null;
+
+    if (!template) {
+      this.logger.warn(`No template found for event "${event}"`);
+      return;
+    }
+
+    const subject = Handlebars.compile(template.subject)(data);
+    const body    = Handlebars.compile(template.body)(data);
+
+    // ── Stub: replace with your email provider ──────────────────────────────
+    if (process.env.NODE_ENV !== 'test') {
+      this.logger.log(`\n[Notification] ──────────────────────────────────`);
+      this.logger.log(`  To:      ${to}`);
+      this.logger.log(`  Subject: ${subject}`);
+      this.logger.log(`  Body:    ${body.replace(/<[^>]+>/g, '').slice(0, 200)}...`);
+      this.logger.log(`─────────────────────────────────────────────────`);
+    }
+    // ───────────────────────────────────────────────────────────────────────
+  }
+}

@@ -1,0 +1,57 @@
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { CreatePostDto } from './dto/create-post.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
+
+@Injectable()
+export class BlogService {
+  async findAll(opts: { page: number; pageSize: number; search?: string; status?: string }) {
+    const { page, pageSize } = opts;
+    // TODO: prisma.post.findMany({ where: { ...(opts.status && { status: opts.status }) },
+    //   skip: (page-1)*pageSize, take: pageSize, orderBy: { publishedAt: 'desc' } })
+    return { data: [], meta: { page, pageSize, total: 0, hasNext: false }, success: true };
+  }
+
+  async findById(id: string) {
+    // TODO: prisma.post.findUnique({ where: { id }, include: { author: true } })
+    const post = null;
+    if (!post) throw new NotFoundException('Post not found');
+    return { data: post, success: true };
+  }
+
+  async findBySlug(slug: string) {
+    // TODO: prisma.post.findUnique({ where: { slug } })
+    const post = null;
+    if (!post) throw new NotFoundException('Post not found');
+    return { data: post, success: true };
+  }
+
+  async create(dto: CreatePostDto, authorId: string) {
+    const slug = dto.title
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-');
+    // TODO: prisma.post.create({ data: { ...dto, slug, authorId, status: dto.status ?? 'draft' } })
+    return {
+      data: { id: 'new-id', slug, authorId, ...dto, status: dto.status ?? 'draft', tags: dto.tags ?? [] },
+      success: true,
+    };
+  }
+
+  async update(id: string, dto: UpdatePostDto, requesterId: string) {
+    // TODO: verify post.authorId === requesterId or requester is admin
+    // prisma.post.update({ where: { id }, data: dto })
+    return { data: { id, ...dto }, success: true };
+  }
+
+  async setStatus(id: string, status: 'published' | 'draft', requesterId: string) {
+    // TODO: prisma.post.update({ where: { id }, data: { status,
+    //   publishedAt: status === 'published' ? new Date() : null } })
+    return { data: { id, status }, success: true };
+  }
+
+  async remove(id: string, requesterId: string) {
+    // TODO: prisma.post.update({ where: { id }, data: { status: 'archived' } })
+    return { data: { deleted: true, id }, success: true };
+  }
+}

@@ -1,0 +1,19 @@
+import { Controller, Get } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
+
+@ApiTags('health')
+@Controller()
+export class HealthController {
+  private readonly startTime = Date.now();
+
+  @Get()
+  @ApiOperation({ summary: 'Health check' })
+  getHealth() {
+    return {
+      status: 'ok',
+      version: process.env.npm_package_version ?? '1.0.0',
+      uptime: Math.floor((Date.now() - this.startTime) / 1000),
+      env: process.env.NODE_ENV ?? 'development',
+    };
+  }
+}

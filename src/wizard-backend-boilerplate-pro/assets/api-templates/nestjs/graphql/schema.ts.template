@@ -1,0 +1,137 @@
+import { Resolver, Query, Mutation, Args, Int, ObjectType, Field, ID, InputType } from '@nestjs/graphql';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+@ObjectType()
+class PageInfo {
+  @Field(() => Int) page: number;
+  @Field(() => Int) pageSize: number;
+  @Field(() => Int) total: number;
+  @Field() hasNext: boolean;
+}
+
+@ObjectType()
+class User {
+  @Field(() => ID) id: string;
+  @Field() email: string;
+  @Field() createdAt: Date;
+}
+
+@ObjectType()
+class UserPage {
+  @Field(() => [User]) data: User[];
+  @Field(() => PageInfo) meta: PageInfo;
+}
+
+@ObjectType()
+class Post {
+  @Field(() => ID) id: string;
+  @Field() title: string;
+  @Field() slug: string;
+  @Field() content: string;
+  @Field({ nullable: true }) excerpt?: string;
+  @Field() status: string;
+  @Field(() => [String]) tags: string[];
+  @Field(() => User, { nullable: true }) author?: User;
+  @Field({ nullable: true }) publishedAt?: Date;
+  @Field() createdAt: Date;
+  @Field() updatedAt: Date;
+}
+
+@ObjectType()
+class PostPage {
+  @Field(() => [Post]) data: Post[];
+  @Field(() => PageInfo) meta: PageInfo;
+}
+
+// ─── Inputs ───────────────────────────────────────────────────────────────────
+
+@InputType()
+class CreatePostInput {
+  @Field() title: string;
+  @Field() content: string;
+  @Field({ nullable: true }) excerpt?: string;
+  @Field(() => [String], { nullable: true }) tags?: string[];
+  @Field({ nullable: true, defaultValue: 'draft' }) status?: string;
+}
+
+@InputType()
+class UpdatePostInput {
+  @Field({ nullable: true }) title?: string;
+  @Field({ nullable: true }) content?: string;
+  @Field({ nullable: true }) excerpt?: string;
+  @Field(() => [String], { nullable: true }) tags?: string[];
+  @Field({ nullable: true }) status?: string;
+}
+
+// ─── Resolvers ────────────────────────────────────────────────────────────────
+
+@Resolver()
+export class BlogResolver {
+  @Query(() => PostPage)
+  async posts(
+    @Args('page', { type: () => Int, defaultValue: 1 }) page: number,
+    @Args('pageSize', { type: () => Int, defaultValue: 20 }) pageSize: number,
+    @Args('search', { nullable: true }) search?: string,
+    @Args('status', { nullable: true }) status?: string,
+  ): Promise<PostPage> {
+    // TODO: prisma.post.findMany({ where: { ...(status && { status }) },
+    //   skip: (page-1)*pageSize, take: pageSize, orderBy: { publishedAt: 'desc' } })
+    return { data: [], meta: { page, pageSize, total: 0, hasNext: false } };
+  }
+
+  @Query(() => Post, { nullable: true })
+  async post(@Args('id', { type: () => ID }) id: string): Promise<Post | null> {
+    // TODO: prisma.post.findUnique({ where: { id } })
+    return null;
+  }
+
+  @Query(() => Post, { nullable: true })
+  async postBySlug(@Args('slug') slug: string): Promise<Post | null> {
+    // TODO: prisma.post.findUnique({ where: { slug } })
+    return null;
+  }
+
+  @Mutation(() => Post)
+  async createPost(@Args('input') input: CreatePostInput): Promise<Post> {
+    const slug = input.title
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-');
+    // TODO: prisma.post.create({ data: { ...input, slug, authorId: ctx.req.user.userId } })
+    const now = new Date();
+    return {
+      id: 'new-id', slug, tags: input.tags ?? [], status: input.status ?? 'draft',
+      createdAt: now, updatedAt: now,
+      ...input,
+    } as Post;
+  }
+
+  @Mutation(() => Post)
+  async updatePost(
+    @Args('id', { type: () => ID }) id: string,
+    @Args('input') input: UpdatePostInput,
+  ): Promise<Post> {
+    // TODO: verify ownership, prisma.post.update({ where: { id }, data: input })
+    return { id, ...input } as Post;
+  }
+
+  @Mutation(() => Boolean)
+  async deletePost(@Args('id', { type: () => ID }) id: string): Promise<boolean> {
+    // TODO: prisma.post.update({ where: { id }, data: { status: 'archived' } })
+    return true;
+  }
+
+  @Mutation(() => Post)
+  async publishPost(@Args('id', { type: () => ID }) id: string): Promise<Post> {
+    // TODO: prisma.post.update({ where: { id }, data: { status: 'published', publishedAt: new Date() } })
+    return { id, status: 'published' } as Post;
+  }
+
+  @Mutation(() => Post)
+  async unpublishPost(@Args('id', { type: () => ID }) id: string): Promise<Post> {
+    // TODO: prisma.post.update({ where: { id }, data: { status: 'draft', publishedAt: null } })
+    return { id, status: 'draft' } as Post;
+  }
+}

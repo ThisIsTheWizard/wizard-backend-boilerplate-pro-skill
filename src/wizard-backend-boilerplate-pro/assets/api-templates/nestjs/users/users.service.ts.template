@@ -1,0 +1,43 @@
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+
+@Injectable()
+export class UsersService {
+  async findAll(opts: { page: number; pageSize: number; search?: string }) {
+    const { page, pageSize } = opts;
+    // TODO: replace with ORM query (Prisma: prisma.user.findMany / TypeORM: repo.findAndCount)
+    return {
+      data: [],
+      meta: { page, pageSize, total: 0, hasNext: false },
+      success: true,
+    };
+  }
+
+  async findById(id: string) {
+    // TODO: const user = await prisma.user.findUnique({ where: { id } });
+    const user = null;
+    if (!user) throw new NotFoundException('User not found');
+    return { data: user, success: true };
+  }
+
+  async create(dto: CreateUserDto) {
+    // TODO: hash dto.password with bcrypt, then prisma.user.create(...)
+    return {
+      data: { id: 'new-id', email: dto.email, createdAt: new Date() },
+      success: true,
+    };
+  }
+
+  async update(id: string, dto: UpdateUserDto, requesterId: string) {
+    if (id !== requesterId) throw new ForbiddenException();
+    // TODO: prisma.user.update({ where: { id }, data: dto })
+    return { data: { id, ...dto }, success: true };
+  }
+
+  async remove(id: string, requesterId: string) {
+    if (id !== requesterId) throw new ForbiddenException();
+    // TODO: prisma.user.update({ where: { id }, data: { status: 'inactive' } })
+    return { data: { deleted: true, id }, success: true };
+  }
+}
