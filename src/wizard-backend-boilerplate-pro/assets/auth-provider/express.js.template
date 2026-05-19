@@ -6,28 +6,27 @@
 // ─── JWT (custom) ─────────────────────────────────────────────────────────────
 // @if AUTH == jwt
 import jwt from 'jsonwebtoken';
-import type { Request, Response, NextFunction } from 'express';
 
-const JWT_SECRET = process.env.JWT_SECRET!;
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? '15m';
 const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN ?? '7d';
 
-export function signAccessToken(userId: string): string {
+export function signAccessToken(userId) {
   return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
-export function signRefreshToken(userId: string): string {
+export function signRefreshToken(userId) {
   return jwt.sign({ sub: userId, type: 'refresh' }, JWT_SECRET, {
     expiresIn: JWT_REFRESH_EXPIRES_IN,
   });
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+export function requireAuth(req, res, next) {
   const token = req.headers.authorization?.split('Bearer ')[1];
   if (!token) { res.status(401).json({ error: 'Missing token' }); return; }
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as { sub: string };
-    (req as any).userId = payload.sub;
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.userId = payload.sub;
     next();
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
@@ -38,29 +37,26 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 // ─── API Key ──────────────────────────────────────────────────────────────────
 // @if AUTH == apikey
 import crypto from 'crypto';
-import type { Request, Response, NextFunction } from 'express';
 
-export function generateApiKey(): { raw: string; hashed: string } {
+export function generateApiKey() {
   const raw = `ak_${crypto.randomBytes(24).toString('hex')}`;
   const hashed = crypto.createHash('sha256').update(raw).digest('hex');
   return { raw, hashed };
 }
 
-export function hashApiKey(raw: string): string {
+export function hashApiKey(raw) {
   return crypto.createHash('sha256').update(raw).digest('hex');
 }
 
 // Wire this after your DB client is set up — implement lookupHashedKey per your ORM
-export function requireApiKey(
-  lookupHashedKey: (hashed: string) => Promise<{ userId: string } | null>
-) {
-  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const key = req.headers['x-api-key'] as string | undefined;
+export function requireApiKey(lookupHashedKey) {
+  return async (req, res, next) => {
+    const key = req.headers['x-api-key'];
     if (!key) { res.status(401).json({ error: 'Missing X-Api-Key header' }); return; }
     const hashed = hashApiKey(key);
     const record = await lookupHashedKey(hashed);
     if (!record) { res.status(401).json({ error: 'Invalid API key' }); return; }
-    (req as any).userId = record.userId;
+    req.userId = record.userId;
     next();
   };
 }
@@ -69,13 +65,10 @@ export function requireApiKey(
 // ─── Session + Cookie ─────────────────────────────────────────────────────────
 // @if AUTH == session
 import session from 'express-session';
-import type { Request, Response, NextFunction } from 'express';
-
 // Install: $PM add express-session connect-pg-simple
-// Install types: $PM add -D @types/express-session
 
 export const sessionMiddleware = session({
-  secret: process.env.SESSION_SECRET!,
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -88,8 +81,8 @@ export const sessionMiddleware = session({
   // store: new (require('connect-pg-simple')(session))({ conString: process.env.DATABASE_URL }),
 });
 
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  if (!(req.session as any).userId) {
+export function requireAuth(req, res, next) {
+  if (!req.session.userId) {
     res.status(401).json({ error: 'Not authenticated' });
     return;
   }
@@ -100,18 +93,17 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 // ─── better-auth ─────────────────────────────────────────────────────────────
 // @if AUTH == better-auth
 import { betterAuth } from 'better-auth';
-import { prismaAdapter } from 'better-auth/adapters/prisma'; // swap for drizzleAdapter if using Drizzle
-import { db } from '../db/client'; // adjust import to your DB client
-import type { Request, Response, NextFunction } from 'express';
+import { sequelizeAdapter } from 'better-auth/adapters/sequelize';
+import { db } from '#db/client.js';
 import { toNodeHandler } from 'better-auth/node';
 
 export const auth = betterAuth({
-  database: prismaAdapter(db, { provider: '{{DB}}' as any }),
+  database: sequelizeAdapter(db, { provider: '{{DB}}' }),
   emailAndPassword: { enabled: true },
   socialProviders: {
-    // Uncomment and add credentials for each provider you want
-    // google: { clientId: process.env.GOOGLE_CLIENT_ID!, clientSecret: process.env.GOOGLE_CLIENT_SECRET! },
-    // github: { clientId: process.env.GITHUB_CLIENT_ID!, clientSecret: process.env.GITHUB_CLIENT_SECRET! },
+    // Uncomment and add credentials for each provider you want:
+    // google: { clientId: process.env.GOOGLE_CLIENT_ID, clientSecret: process.env.GOOGLE_CLIENT_SECRET },
+    // github: { clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET },
   },
 });
 
@@ -119,14 +111,14 @@ export const auth = betterAuth({
 export const authHandler = toNodeHandler(auth);
 
 // Middleware to attach session to req
-export async function attachSession(req: Request, _res: Response, next: NextFunction) {
-  const session = await auth.api.getSession({ headers: req.headers as any });
-  (req as any).session = session;
+export async function attachSession(req, _res, next) {
+  const session = await auth.api.getSession({ headers: req.headers });
+  req.session = session;
   next();
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction): void {
-  if (!(req as any).session?.user) {
+export function requireAuth(req, res, next) {
+  if (!req.session?.user) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
@@ -137,16 +129,15 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
 // ─── Clerk ────────────────────────────────────────────────────────────────────
 // @if AUTH == clerk
 import { clerkMiddleware, requireAuth as clerkRequireAuth, getAuth } from '@clerk/express';
-import type { RequestHandler } from 'express';
 
 // Mount as first middleware: app.use(clerkMiddleware())
 export { clerkMiddleware };
 
 // Drop-in protected route guard
-export const requireAuth: RequestHandler = clerkRequireAuth();
+export const requireAuth = clerkRequireAuth();
 
 // Helper to get current user id in a route
-export function getUserId(req: any): string {
+export function getUserId(req) {
   return getAuth(req).userId ?? '';
 }
 // @endif
@@ -157,7 +148,7 @@ import { auth } from 'express-oauth2-jwt-bearer';
 
 // Mount as route-level or global middleware
 export const requireAuth = auth({
-  audience: process.env.AUTH0_AUDIENCE!,
+  audience: process.env.AUTH0_AUDIENCE,
   issuerBaseURL: `https://${process.env.AUTH0_DOMAIN}/`,
   tokenSigningAlg: 'RS256',
 });
@@ -166,19 +157,18 @@ export const requireAuth = auth({
 // ─── Supabase Auth ────────────────────────────────────────────────────────────
 // @if AUTH == supabase
 import { createClient } from '@supabase/supabase-js';
-import type { Request, Response, NextFunction } from 'express';
 
 const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function requireAuth(req, res, next) {
   const token = req.headers.authorization?.split('Bearer ')[1];
   if (!token) { res.status(401).json({ error: 'Missing token' }); return; }
   const { data: { user }, error } = await supabase.auth.getUser(token);
   if (error || !user) { res.status(401).json({ error: 'Invalid token' }); return; }
-  (req as any).user = user;
+  req.user = user;
   next();
 }
 // @endif

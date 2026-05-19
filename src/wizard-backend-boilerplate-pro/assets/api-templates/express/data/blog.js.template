@@ -1,0 +1,145 @@
+/**
+ * Blog REST routes — used when GRAPHQL=no
+ * When GRAPHQL=yes, use graphql/blog.resolvers.js instead of this file.
+ */
+import { Router } from 'express';
+import { requireAuth } from '#auth/provider.js';
+import { paginate } from '#lib/pagination.js';
+import { createError } from '#core/errorHandler.js';
+
+const router = Router();
+
+// GET /blog/posts?page=1&pageSize=20&search=hello&status=published&sort=publishedAt&order=desc
+router.get('/', async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page ?? '1', 10);
+    const pageSize = Math.min(parseInt(req.query.pageSize ?? '20', 10), 100);
+    const search = req.query.search;
+    const status = req.query.status;
+    const sort = req.query.sort ?? 'publishedAt';
+    const order = req.query.order ?? 'desc';
+
+    // TODO: Post.findAndCountAll({
+    //   where: {
+    //     ...(status && { status }),
+    //     ...(search && {
+    //       [Op.or]: [
+    //         { title: { [Op.like]: `%${search}%` } },
+    //         { content: { [Op.like]: `%${search}%` } },
+    //       ],
+    //     }),
+    //   },
+    //   order: [[sort, order.toUpperCase()]],
+    //   offset: (page - 1) * pageSize,
+    //   limit: pageSize,
+    //   include: [{ model: User, attributes: ['id', 'email'] }],
+    // });
+    const data = [];
+    const total = 0;
+
+    res.json(paginate(data, total, page, pageSize));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /blog/posts/:id
+router.get('/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    // TODO: Post.findByPk(id, { include: [{ model: User, attributes: ['id', 'email'] }] })
+    const post = null;
+    if (!post) return next(createError('Post not found', 404, 'NOT_FOUND'));
+    res.json({ data: post });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /blog/posts/slug/:slug
+router.get('/slug/:slug', async (req, res, next) => {
+  try {
+    const { slug } = req.params;
+    // TODO: Post.findOne({ where: { slug } })
+    const post = null;
+    if (!post) return next(createError('Post not found', 404, 'NOT_FOUND'));
+    res.json({ data: post });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /blog/posts (protected)
+router.post('/', requireAuth, async (req, res, next) => {
+  try {
+    const { title, content, excerpt, tags, status = 'draft' } = req.body;
+
+    if (!title || !content) {
+      return next(createError('title and content are required', 400, 'VALIDATION_ERROR'));
+    }
+
+    const slug = title
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-');
+
+    // TODO: Post.create({ title, slug, content, excerpt, tags, status,
+    //   authorId: req.userId, publishedAt: status === 'published' ? new Date() : null })
+    const post = { id: 'new-id', title, slug, content, excerpt, tags: tags ?? [], status };
+
+    res.status(201).json({ data: post });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /blog/posts/:id (protected — author or admin only)
+router.put('/:id', requireAuth, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { title, content, excerpt, tags, status } = req.body;
+
+    // TODO: verify post.authorId === req.userId or req.userRole === 'admin'
+    // TODO: Post.update({ title, content, excerpt, tags, status,
+    //   ...(status === 'published' && { publishedAt: new Date() }) }, { where: { id } })
+    res.json({ data: { id, title, content, excerpt, tags, status } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /blog/posts/:id/publish (protected)
+router.patch('/:id/publish', requireAuth, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    // TODO: Post.update({ status: 'published', publishedAt: new Date() }, { where: { id } })
+    res.json({ data: { id, status: 'published' } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /blog/posts/:id/unpublish (protected)
+router.patch('/:id/unpublish', requireAuth, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    // TODO: Post.update({ status: 'draft', publishedAt: null }, { where: { id } })
+    res.json({ data: { id, status: 'draft' } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /blog/posts/:id (protected)
+router.delete('/:id', requireAuth, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    // TODO: Post.update({ status: 'archived' }, { where: { id } })  // soft-delete via status
+    res.json({ data: { deleted: true, id } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+export default router;

@@ -1,0 +1,98 @@
+/**
+ * Blog GraphQL resolvers — used when GRAPHQL=yes
+ *
+ * These resolvers replace the REST /blog/posts routes entirely.
+ * Merge into the main schema resolvers in graphql/schema.js:
+ *
+ *   import { merge } from '@graphql-tools/merge';
+ *   import { blogResolvers } from '#graphql/blog.resolvers.js';
+ *   export const resolvers = merge(baseResolvers, blogResolvers);
+ *
+ * The typeDefs for Post/PostPage/CreatePostInput/UpdatePostInput are already
+ * declared in graphql/schema.js — no duplication needed here.
+ */
+
+export const blogResolvers = {
+  Query: {
+    posts: async (_, args) => {
+      const page = args.page ?? 1;
+      const pageSize = Math.min(args.pageSize ?? 20, 100);
+      // TODO: Post.findAndCountAll({
+      //   where: {
+      //     ...(args.status && { status: args.status }),
+      //     ...(args.search && {
+      //       [Op.or]: [
+      //         { title: { [Op.like]: `%${args.search}%` } },
+      //         { content: { [Op.like]: `%${args.search}%` } },
+      //       ],
+      //     }),
+      //   },
+      //   order: [['publishedAt', 'DESC']],
+      //   offset: (page - 1) * pageSize,
+      //   limit: pageSize,
+      //   include: [{ model: User, attributes: ['id', 'email'] }],
+      // });
+      return { data: [], meta: { page, pageSize, total: 0, hasNext: false } };
+    },
+
+    post: async (_, args) => {
+      // TODO: Post.findByPk(args.id, { include: [{ model: User, attributes: ['id', 'email'] }] })
+      return null;
+    },
+
+    postBySlug: async (_, args) => {
+      // TODO: Post.findOne({ where: { slug: args.slug } })
+      return null;
+    },
+  },
+
+  Mutation: {
+    createPost: async (_, args, ctx) => {
+      if (!ctx.user) throw new Error('UNAUTHORIZED');
+      const slug = args.input.title
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-');
+      // TODO: Post.create({
+      //   ...args.input,
+      //   slug,
+      //   authorId: ctx.user.id,
+      //   status: args.input.status ?? 'draft',
+      //   publishedAt: args.input.status === 'published' ? new Date() : null,
+      // });
+      return {
+        id: 'new-id',
+        slug,
+        ...args.input,
+        tags: args.input.tags ?? [],
+        status: args.input.status ?? 'draft',
+      };
+    },
+
+    updatePost: async (_, args, ctx) => {
+      if (!ctx.user) throw new Error('UNAUTHORIZED');
+      // TODO: verify post.authorId === ctx.user.id or ctx.user.role === 'admin'
+      // TODO: Post.update(args.input, { where: { id: args.id } })
+      return { id: args.id, ...args.input };
+    },
+
+    deletePost: async (_, args, ctx) => {
+      if (!ctx.user) throw new Error('UNAUTHORIZED');
+      // TODO: Post.update({ status: 'archived' }, { where: { id: args.id } })  // soft-delete
+      return true;
+    },
+
+    publishPost: async (_, args, ctx) => {
+      if (!ctx.user) throw new Error('UNAUTHORIZED');
+      // TODO: Post.update({ status: 'published', publishedAt: new Date() }, { where: { id: args.id } })
+      return { id: args.id, status: 'published' };
+    },
+
+    unpublishPost: async (_, args, ctx) => {
+      if (!ctx.user) throw new Error('UNAUTHORIZED');
+      // TODO: Post.update({ status: 'draft', publishedAt: null }, { where: { id: args.id } })
+      return { id: args.id, status: 'draft' };
+    },
+  },
+};

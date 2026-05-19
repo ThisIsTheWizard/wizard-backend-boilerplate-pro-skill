@@ -1,0 +1,45 @@
+/**
+ * Notification service — stub implementation
+ *
+ * In development: logs the rendered email to the console so you can see
+ * exactly what would be sent, without requiring any external service.
+ *
+ * To wire a real provider, replace the stub block below with one of:
+ *   - AWS SES:   import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses'
+ *   - SendGrid:  import sgMail from '@sendgrid/mail'
+ *   - Resend:    import { Resend } from 'resend'
+ *   - Postmark:  import * as postmark from 'postmark'
+ *
+ * Required env var when using a real provider: FROM_EMAIL
+ */
+import Handlebars from 'handlebars';
+import { AuthTemplate } from '#modules/auth-template/auth-template.entity.js';
+
+/**
+ * Send a notification email.
+ *
+ * @param {object} params
+ * @param {string} params.event  - AuthTemplate event key (e.g. 'send_user_verification_token')
+ * @param {string} params.to     - Recipient email address
+ * @param {object} params.data   - Handlebars template variables
+ */
+export async function sendNotification({ event, to, data }) {
+  const template = await AuthTemplate.findOne({ where: { event } });
+  if (!template) {
+    console.warn(`[Notification] No template found for event "${event}"`);
+    return;
+  }
+
+  const subject = Handlebars.compile(template.subject)(data);
+  const body    = Handlebars.compile(template.body)(data);
+
+  // ── Stub: replace this block with your email provider ──────────────────────
+  if (process.env.NODE_ENV !== 'test') {
+    console.log(`\n[Notification] ──────────────────────────────────`);
+    console.log(`  To:      ${to}`);
+    console.log(`  Subject: ${subject}`);
+    console.log(`  Body:    ${body.replace(/<[^>]+>/g, '').slice(0, 200)}...`);
+    console.log(`─────────────────────────────────────────────────\n`);
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+}

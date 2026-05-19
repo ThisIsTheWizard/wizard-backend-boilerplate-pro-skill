@@ -1,16 +1,16 @@
-import express, { type Express } from 'express';
+import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { errorHandler } from './core/errorHandler';
-import { requestLogger } from './core/logger';
-import healthRouter from './core/health';
-import authRouter from './auth/router';
-import usersRouter from './data/users';
-import filesRouter from './data/files';
-import { setupSwagger } from './docs/swagger';
+import { errorHandler } from '#core/errorHandler.js';
+import { requestLogger } from '#core/logger.js';
+import healthRouter from '#core/health.js';
+import authRouter from '#auth/router.js';
+import usersRouter from '#data/users.js';
+import filesRouter from '#data/files.js';
+import { setupSwagger } from '#docs/swagger.js';
 
-export function createApp(): Express {
+export function createApp() {
   const app = express();
 
   // Parse bodies
@@ -36,7 +36,7 @@ export function createApp(): Express {
   app.use('/users', usersRouter);
   app.use('/files', filesRouter);
 
-  // Docs (registered after routes so all routes appear)
+  // Docs (registered after routes so all routes appear in Swagger)
   setupSwagger(app);
 
   // Error handler — must be last

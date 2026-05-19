@@ -16,7 +16,7 @@ router.get('/', (_req, res) => {
     version,
     uptime: Math.floor(process.uptime()),
     env: process.env.NODE_ENV ?? 'development',
-    db: 'connected', // Replace with actual DB ping if DB != none
+    db: 'connected', // Replace with actual Sequelize .authenticate() ping if DB != none
   });
 });
 

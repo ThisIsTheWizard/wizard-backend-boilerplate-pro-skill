@@ -90,80 +90,71 @@ export const typeDefs = gql`
 
 export const resolvers = {
   Query: {
-    users: async (_: unknown, args: { page?: number; pageSize?: number; search?: string }) => {
+    users: async (_, args) => {
       const page = args.page ?? 1;
       const pageSize = Math.min(args.pageSize ?? 20, 100);
-      // TODO: query ORM — db.user.findMany({ skip: (page-1)*pageSize, take: pageSize, ... })
+      // TODO: User.findAndCountAll({ offset: (page-1)*pageSize, limit: pageSize })
       return { data: [], meta: { page, pageSize, total: 0, hasNext: false } };
     },
 
-    user: async (_: unknown, args: { id: string }) => {
-      // TODO: db.user.findUnique({ where: { id: args.id } })
+    user: async (_, args) => {
+      // TODO: User.findByPk(args.id)
       return null;
     },
 
-    posts: async (
-      _: unknown,
-      args: { page?: number; pageSize?: number; search?: string; status?: string },
-    ) => {
+    posts: async (_, args) => {
       const page = args.page ?? 1;
       const pageSize = Math.min(args.pageSize ?? 20, 100);
-      // TODO: db.post.findMany({ where: { ...(args.status && { status: args.status }) }, skip: (page-1)*pageSize, take: pageSize })
+      // TODO: Post.findAndCountAll({ where: { ...(args.status && { status: args.status }) },
+      //   offset: (page-1)*pageSize, limit: pageSize })
       return { data: [], meta: { page, pageSize, total: 0, hasNext: false } };
     },
 
-    post: async (_: unknown, args: { id: string }) => {
-      // TODO: db.post.findUnique({ where: { id: args.id }, include: { author: true } })
+    post: async (_, args) => {
+      // TODO: Post.findByPk(args.id, { include: [{ model: User }] })
       return null;
     },
 
-    postBySlug: async (_: unknown, args: { slug: string }) => {
-      // TODO: db.post.findUnique({ where: { slug: args.slug } })
+    postBySlug: async (_, args) => {
+      // TODO: Post.findOne({ where: { slug: args.slug } })
       return null;
     },
   },
 
   Mutation: {
-    createPost: async (
-      _: unknown,
-      args: { input: { title: string; content: string; excerpt?: string; tags?: string[]; status?: string } },
-      ctx: { user?: { id: string } },
-    ) => {
+    createPost: async (_, args, ctx) => {
       if (!ctx.user) throw new Error('UNAUTHORIZED');
       const slug = args.input.title
         .toLowerCase()
         .trim()
         .replace(/[^a-z0-9\s-]/g, '')
         .replace(/\s+/g, '-');
-      // TODO: db.post.create({ data: { ...args.input, slug, authorId: ctx.user.id, status: args.input.status ?? 'draft' } })
+      // TODO: Post.create({ ...args.input, slug, authorId: ctx.user.id,
+      //   status: args.input.status ?? 'draft' })
       return { id: 'new-id', slug, ...args.input, tags: args.input.tags ?? [], status: args.input.status ?? 'draft' };
     },
 
-    updatePost: async (
-      _: unknown,
-      args: { id: string; input: Record<string, unknown> },
-      ctx: { user?: { id: string } },
-    ) => {
+    updatePost: async (_, args, ctx) => {
       if (!ctx.user) throw new Error('UNAUTHORIZED');
-      // TODO: verify ownership, then db.post.update({ where: { id: args.id }, data: args.input })
+      // TODO: verify ownership, then Post.update(args.input, { where: { id: args.id } })
       return { id: args.id, ...args.input };
     },
 
-    deletePost: async (_: unknown, args: { id: string }, ctx: { user?: { id: string } }) => {
+    deletePost: async (_, args, ctx) => {
       if (!ctx.user) throw new Error('UNAUTHORIZED');
-      // TODO: db.post.update({ where: { id: args.id }, data: { status: 'archived' } })
+      // TODO: Post.update({ status: 'archived' }, { where: { id: args.id } })
       return true;
     },
 
-    publishPost: async (_: unknown, args: { id: string }, ctx: { user?: { id: string } }) => {
+    publishPost: async (_, args, ctx) => {
       if (!ctx.user) throw new Error('UNAUTHORIZED');
-      // TODO: db.post.update({ where: { id: args.id }, data: { status: 'published', publishedAt: new Date() } })
+      // TODO: Post.update({ status: 'published', publishedAt: new Date() }, { where: { id: args.id } })
       return { id: args.id, status: 'published' };
     },
 
-    unpublishPost: async (_: unknown, args: { id: string }, ctx: { user?: { id: string } }) => {
+    unpublishPost: async (_, args, ctx) => {
       if (!ctx.user) throw new Error('UNAUTHORIZED');
-      // TODO: db.post.update({ where: { id: args.id }, data: { status: 'draft', publishedAt: null } })
+      // TODO: Post.update({ status: 'draft', publishedAt: null }, { where: { id: args.id } })
       return { id: args.id, status: 'draft' };
     },
   },
