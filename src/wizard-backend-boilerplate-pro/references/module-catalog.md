@@ -1,7 +1,20 @@
-# Module Catalog — 38 API Modules
+# Module Catalog — Up to 28 API Modules
 
 Full specifications for all modules installed in Phase 5.
-Module count: **30 core + 8 RBAC/auth infrastructure = 38 total**.
+
+Module count: **15 always-on + up to 13 conditional = 28 max**.
+
+| Condition | Modules added |
+|---|---|
+| Always | 15 (Core×6, UserAuth, Blog, Infrastructure×2, EventEmitter, DX/Docs×4) |
+| `CACHE = yes` | +1 CacheClient |
+| `JOBS = yes` | +1 BackgroundJob |
+| `WEBSOCKET = yes` | +1 WebSocketHub |
+| `SSE = yes` | +1 ServerSentEvents |
+| `AUTH = jwt\|apikey\|session` | +4 Auth infrastructure (AuthToken, VerificationToken, AuthTemplate, Notification) |
+| above + `RBAC = yes` | +4 RBAC (Role, Permission, RoleUser, RolePermission) |
+| `GRAPHQL = yes` | +1 GraphQLServer |
+| **Max** | **31** |
 
 ---
 
@@ -121,14 +134,14 @@ Module count: **30 core + 8 RBAC/auth infrastructure = 38 total**.
 ---
 
 ### Notification
-**Description:** Email sending service. Fetches the template by event key, compiles it with Handlebars, sends via AWS SES (with `console.log` fallback in test/dev).
+**Description:** Email notification stub. Fetches the template by event key, compiles it with Handlebars, and logs the rendered output to the console in dev. Swap the `sendNotification` body for a real provider (AWS SES, SendGrid, Resend, Postmark) when ready to send real emails.
 
-**Peer deps:** `@aws-sdk/client-ses`, `handlebars`
+**Peer deps:** `handlebars`
 
 **Key function:**
-- `sendNotification({ event, to, data })` — looks up AuthTemplate by `event`, compiles Handlebars with `data`, sends email
+- `sendNotification({ event, to, data })` — looks up AuthTemplate by `event`, compiles Handlebars with `data`, logs to console (stub)
 
-**Env vars required:** `FROM_EMAIL`, `AWS_REGION`
+**Env vars required:** `FROM_EMAIL` (only needed once a real provider is wired)
 
 **Template files:**
 - Express: `src/modules/notification/notification.service.js`
@@ -138,10 +151,10 @@ Module count: **30 core + 8 RBAC/auth infrastructure = 38 total**.
 
 ## Category: RBAC (4 modules — custom auth only)
 
-> **Install condition:** `AUTH = jwt | apikey | session` only.
-> Auth providers (better-auth, Clerk, Auth0, Supabase) ship their own role/permission/org systems.
-> Installing custom RBAC tables alongside a provider would duplicate and conflict with that system.
-> When using a provider, use its native RBAC APIs instead.
+> **Install condition:** `AUTH = jwt | apikey | session` **AND `RBAC = yes`** (Q7).
+> Auth providers (better-auth, Clerk, Auth0, Supabase) ship their own role/permission/org systems —
+> skip this entire category when using a provider and use the provider's native RBAC APIs instead.
+> When using custom auth but `RBAC = no`, protected routes use `requireAuth` only (no permission checks).
 
 **Provider RBAC equivalents:**
 | Provider | Role system | Permission system |
@@ -242,7 +255,7 @@ Module count: **30 core + 8 RBAC/auth infrastructure = 38 total**.
 
 **Schema fields:** `id`, `title`, `slug` (unique, auto-generated), `content`, `excerpt`, `author_id` (FK → User), `status` (`draft` | `published` | `archived`), `tags` (array), `published_at`, timestamps.
 
-**Endpoints:**
+**When `GRAPHQL = no` (REST routes):**
 - `GET /blog/posts` — list (paginated, filterable by `status`, `search`)
 - `POST /blog/posts` — create (auth)
 - `GET /blog/posts/:id` — get by ID
@@ -252,25 +265,23 @@ Module count: **30 core + 8 RBAC/auth infrastructure = 38 total**.
 - `PATCH /blog/posts/:id/unpublish` — unpublish (auth)
 - `DELETE /blog/posts/:id` — soft-delete via `status = archived` (auth)
 
+**When `GRAPHQL = yes` (GraphQL only — REST routes above are skipped):**
+Blog CRUD is served as GraphQL operations. Resolvers are merged into the main schema from
+`assets/api-templates/express/graphql/blog.resolvers.js.template`:
+- Query: `posts(page, pageSize, search, status)`, `post(id)`, `postBySlug(slug)`
+- Mutation: `createPost(input)`, `updatePost(id, input)`, `publishPost(id)`, `unpublishPost(id)`, `deletePost(id)`
+
 **Pagination envelope:** `{ data: Post[], meta_data: { page, pageSize, total, hasNext } }`
 
 ---
 
-## Category: Infrastructure (4 modules)
+## Category: Infrastructure (2 always + 2 conditional)
 
 ### DatabaseClient
 **Description:** Database connection setup.
 
 - Express: `sequelize.authenticate()` called at startup in `server.js`
 - NestJS: `PrismaService extends PrismaClient implements OnModuleInit` — auto-connects
-
----
-
-### CacheClient
-**Description:** Redis wrapper for get/set/del/expire.
-
-**Peer deps:**
-- Node.js: `ioredis`
 
 ---
 
@@ -282,24 +293,52 @@ Module count: **30 core + 8 RBAC/auth infrastructure = 38 total**.
 
 ---
 
-### BackgroundJob
-**Description:** Async job queue.
+### CacheClient _(conditional: `CACHE = yes`)_
+**Description:** Thin async wrapper around Redis for get/set/del/expire. Env var: `REDIS_URL`.
 
-**Peer deps:**
-- Node.js: `bullmq` + `ioredis`
+**Peer deps:** `ioredis` (Node) · `redis-py` (Python) · `go-redis/v9` (Go)
+
+**Key functions:** `get(key)`, `set(key, value, ttlSeconds?)`, `del(key)`, `expire(key, seconds)`
 
 ---
 
-## Category: Real-time (3 modules)
+### BackgroundJob _(conditional: `JOBS = yes`)_
+**Description:** Async job queue for fire-and-forget work (emails, webhooks, report generation). Worker process runs separately from the API server. Requires Redis (`REDIS_URL`).
 
-### WebSocketHub
-**Peer deps:** `ws` + `@types/ws` (Express) · `@nestjs/websockets` (NestJS)
+**Peer deps:** `bullmq` + `ioredis` (Node) · `celery[redis]` (Python) · `asynq` (Go)
 
-### ServerSentEvents
-**Description:** `GET /events` SSE stream.
+**Key functions:** `addJob(queue, name, data, opts?)`, `createWorker(queue, handler)`, `getJobCounts(queue)`
 
-### EventEmitter
-**Peer deps:** `eventemitter3` (Express/Fastify/Hono) · NestJS built-in `EventEmitter2`
+---
+
+## Category: Real-time (1 always + 2 conditional)
+
+### EventEmitter _(always-on)_
+**Description:** In-process pub/sub bus for decoupled module communication (e.g. `UserAuth` emits `user:registered`, `Notification` listens). No network hop, no extra infrastructure.
+
+**Peer deps:** `eventemitter3` (Node) · `@nestjs/event-emitter` (NestJS) · stdlib (Python/Go)
+
+---
+
+### WebSocketHub _(conditional: `WEBSOCKET = yes`)_
+**Description:** Bidirectional real-time channel. Attaches to the existing HTTP server (no extra port). Tracks connected clients in a `Map` for targeted sends.
+
+**Endpoint:** `WS /ws`
+
+**Peer deps:** `ws` (Node) · `@nestjs/websockets` (NestJS) · `gorilla/websocket` (Go)
+
+**Key functions:** `broadcast(event, data)`, `sendToClient(clientId, event, data)`
+
+**Frame format:** `{ event, data, clientId, ts }`
+
+---
+
+### ServerSentEvents _(conditional: `SSE = yes`)_
+**Description:** Unidirectional server-to-client push stream. Lighter than WebSocket when clients only receive (dashboards, progress bars, feeds).
+
+**Endpoint:** `GET /events`
+
+**Key functions:** `addClient(res)`, `removeClient(clientId)`, `broadcast(event, data)`, `sendEvent(clientId, event, data)`
 
 ---
 
@@ -313,7 +352,9 @@ Module count: **30 core + 8 RBAC/auth infrastructure = 38 total**.
 - NestJS: `@nestjs/swagger` → `DocumentBuilder` + `SwaggerModule.setup('docs', app, document)`
 
 ### RequestValidator
-**Peer deps:** `validator` (Express) · `class-validator` + `class-transformer` (NestJS)
+**Description:** Rejects malformed requests before they reach business logic. Returns `{ error: "VALIDATION_ERROR", details: [...], success: false }` on failure.
+
+**Peer deps:** `validator` (Express) · `class-validator` + `class-transformer` (NestJS) · Pydantic v2 (Python) · `go-playground/validator` (Go)
 
 ### ResponseFormatter
 **Description:** Consistent envelope `{ data: T, success: true }` or `{ error: string, success: false }`.
@@ -339,14 +380,20 @@ Module count: **30 core + 8 RBAC/auth infrastructure = 38 total**.
 
 ## Module counts by category
 
-| Category | Count |
-|---|---|
-| Core | 6 |
-| Auth infrastructure | 4 |
-| RBAC | 4 |
-| User + Auth routes | 1 |
-| Blog | 1 |
-| Infrastructure | 4 |
-| Real-time | 3 |
-| DX / Docs | 5 |
-| **Total** | **28 base + GraphQLServer (conditional)** |
+| Category | Count | Condition |
+|---|---|---|
+| Core | 6 | Always |
+| User + Auth routes | 1 | Always |
+| Blog | 1 | Always |
+| Infrastructure | 2 | Always (DatabaseClient, Migrations) |
+| EventEmitter | 1 | Always |
+| DX / Docs (excl. GraphQL) | 4 | Always |
+| **Always-on subtotal** | **15** | |
+| CacheClient | 1 | `CACHE = yes` |
+| BackgroundJob | 1 | `JOBS = yes` |
+| WebSocketHub | 1 | `WEBSOCKET = yes` |
+| ServerSentEvents | 1 | `SSE = yes` |
+| Auth infrastructure | 4 | `AUTH = jwt\|apikey\|session` only |
+| RBAC | 4 | `AUTH = jwt\|apikey\|session` **and** `RBAC = yes` |
+| GraphQLServer | 1 | `GRAPHQL = yes` only |
+| **Maximum total** | **28** | All conditional options enabled |

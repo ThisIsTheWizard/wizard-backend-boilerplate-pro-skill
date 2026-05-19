@@ -2,7 +2,7 @@
   "name": "wizard-backend-boilerplate-pro",
   "displayName": "Wizard Backend Boilerplate Pro",
   "version": "1.0.0",
-  "description": "Scaffold production-ready backend APIs with Express, Fastify, NestJS, Hono, FastAPI, Django, Flask, Gin, or Echo — 28 API modules, database integration, JWT/API-key/managed auth, Docker, OpenAPI docs.",
+  "description": "Scaffold production-ready backend APIs with Express, Fastify, NestJS, Hono, FastAPI, Django, Flask, Gin, or Echo — up to 28 API modules, database integration, JWT/API-key/session/managed auth, optional RBAC, GraphQL, three-environment Docker, and OpenAPI docs.",
   "author": "The Wizard",
   "license": "MIT",
   "category": "scaffold",

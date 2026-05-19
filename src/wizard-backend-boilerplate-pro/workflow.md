@@ -22,11 +22,11 @@ shown here, see `references/frameworks/<choice>.md`.
 
 ## Phase 1 — Interview
 
-Collect all **six answers** before running any commands. Never start Phase 2 early.
+Collect all **seven answers** before running any commands. Never start Phase 2 early.
 
 ```
 Q1  Framework?
-     1) Express       (Node.js / TypeScript)
+     1) Express       (Node.js / JavaScript)
      2) Fastify       (Node.js / TypeScript)
      3) NestJS        (Node.js / TypeScript)
      4) Hono          (Node.js / TypeScript)
@@ -36,20 +36,38 @@ Q1  Framework?
      8) Gin           (Go)
      9) Echo          (Go)
 
-Q2  Database?
-     1) PostgreSQL
-     2) MySQL
-     3) MongoDB
-     4) SQLite
-     5) None
+Q2  Database + ORM?
+     First pick a database:
+       1) PostgreSQL
+       2) MySQL
+       3) MongoDB
+       4) SQLite
+       5) None
+
+     Then confirm (or override) the ORM. Defaults by framework:
+       Framework      | Postgres/MySQL/SQLite | MongoDB
+       ───────────────|──────────────────────|────────
+       Express        | Sequelize            | Mongoose
+       Fastify/NestJS | Prisma               | Mongoose
+       Hono           | Drizzle              | Mongoose
+       FastAPI/Flask  | SQLAlchemy           | Motor
+       Django         | Django ORM           | MongoEngine
+       Gin/Echo       | GORM                 | mongo-driver
+
+     Present: "I'll use [ORM] for [DB]. Accept, or name a different ORM?"
+     Accept override silently if the user names a compatible ORM.
 
 Q3  Auth strategy?
      1) JWT           (default — stateless, access + refresh tokens)
      2) API Key       (simple service-to-service auth)
      3) Session       (cookie-based, stateful)
-     4) None          (no auth, all routes public)
+     4) better-auth   (library-based, self-hosted)
+     5) Clerk         (fully managed)
+     6) Auth0         (enterprise managed)
+     7) Supabase      (PostgreSQL-based)
+     8) None          (no auth, all routes public)
 
-Q4  Include Docker (Dockerfile + docker-compose.yml)?
+Q4  Include Docker (Dockerfile.Dev/Prod/Test + docker-compose.dev/prod/test.yml)?
      yes / no
 
 Q5  Project name?
@@ -57,17 +75,23 @@ Q5  Project name?
 
 Q6  Include GraphQL endpoint alongside REST?
      yes / no
-     (If yes: installs Apollo/Mercurius/Strawberry/gqlgen per framework, mounts POST /graphql,
-      and adds an interactive playground in dev. REST routes are unchanged.)
+     (If yes: Apollo/Mercurius/Strawberry/gqlgen per framework; POST /graphql added.
+      Blog CRUD is served as GraphQL queries/mutations — REST /blog/posts routes are skipped.)
+
+Q7  Include RBAC (roles, permissions, role-users, role-permissions)?
+     yes / no
+     (Only asked when AUTH = jwt | apikey | session. Providers manage roles internally.)
 ```
 
 Store answers as:
 - `FRAMEWORK` — e.g. `express`, `fastapi`, `gin`
 - `DB` — e.g. `postgres`, `mysql`, `mongodb`, `sqlite`, `none`
-- `AUTH` — e.g. `jwt`, `apikey`, `session`, `none`
+- `ORM` — e.g. `sequelize`, `prisma`, `drizzle`, `sqlalchemy`, `gorm`, `mongoose`, `none`
+- `AUTH` — e.g. `jwt`, `apikey`, `session`, `better-auth`, `clerk`, `auth0`, `supabase`, `none`
 - `DOCKER` — `yes` or `no`
 - `APP_NAME` — e.g. `my-api`
 - `GRAPHQL` — `yes` or `no`
+- `RBAC` — `yes` or `no` (always `no` when AUTH is a provider)
 
 ---
 
@@ -94,13 +118,13 @@ bash scripts/check_versions.sh --json --ecosystem python
 bash scripts/check_versions.sh --json --ecosystem go
 ```
 
-### ORM/ODM resolution table
+### ORM/ODM resolution table (auto-resolved in Phase 1 Q2)
 
 | FRAMEWORK | DB = postgres / mysql / sqlite | DB = mongodb |
 |---|---|---|
-| express | prisma | mongoose |
+| express | **sequelize** | mongoose |
 | fastify | prisma | mongoose |
-| nestjs | typeorm | mongoose |
+| nestjs | prisma | mongoose |
 | hono | drizzle | mongoose |
 | fastapi | sqlalchemy | motor |
 | django | django-orm | mongoengine |
@@ -108,7 +132,7 @@ bash scripts/check_versions.sh --json --ecosystem go
 | gin | gorm | mongo-driver |
 | echo | gorm | mongo-driver |
 
-Store resolved ORM as `ORM`. If `DB = none`, set `ORM = none`.
+If `DB = none`, set `ORM = none`.
 
 ---
 
@@ -117,13 +141,38 @@ Store resolved ORM as `ORM`. If `DB = none`, set `ORM = none`.
 See `references/frameworks/<FRAMEWORK>.md` for the full scaffold procedure.
 Quick-reference commands:
 
-### Express
+### Express (JavaScript — no TypeScript)
 ```bash
 mkdir "$APP_NAME" && cd "$APP_NAME"
 $PM init -y
-$PM add express cors helmet morgan express-rate-limit
-$PM add -D typescript @types/node @types/express ts-node nodemon eslint prettier
-npx tsc --init
+$PM add express cors helmet morgan express-rate-limit dotenv
+$PM add -D nodemon eslint prettier
+
+# Add ESM + path aliases to package.json
+node -e "
+const fs = require('fs');
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
+pkg.type = 'module';
+pkg.main = 'src/server.js';
+pkg.scripts = {
+  ...pkg.scripts,
+  start: 'node src/server.js',
+  dev: 'nodemon src/server.js',
+  lint: 'eslint src'
+};
+pkg.imports = {
+  '#core/*':          './src/core/*.js',
+  '#auth/*':          './src/auth/*.js',
+  '#data/*':          './src/data/*.js',
+  '#docs/*':          './src/docs/*.js',
+  '#lib/*':           './src/lib/*.js',
+  '#db/*':            './src/db/*.js',
+  '#modules/*':       './src/modules/*.js',
+  '#graphql/*':       './src/graphql/*.js',
+  '#notifications/*': './src/notifications/*.js'
+};
+fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+"
 ```
 
 ### Fastify
@@ -210,32 +259,46 @@ cp "$APP_NAME/.env.example" "$APP_NAME/.env"
 Replace placeholders in `.env`:
 ```bash
 sed -i "s/{{APP_NAME}}/$APP_NAME/g" "$APP_NAME/.env"
-sed -i "s/{{PORT}}/$([ "$FRAMEWORK" = "fastapi" ] || [ "$FRAMEWORK" = "flask" ] || [ "$FRAMEWORK" = "django" ] && echo 8000 || ([ "$FRAMEWORK" = "gin" ] || [ "$FRAMEWORK" = "echo" ] && echo 8080) || echo 3000)/g" "$APP_NAME/.env"
 ```
 
 ### Database setup (skip if DB = none)
 
-Node.js + Prisma:
+**Node.js + Sequelize (Express):**
 ```bash
-$PM add prisma @prisma/client
-npx prisma init --datasource-provider "$([ "$DB" = "mongodb" ] && echo mongodb || [ "$DB" = "mysql" ] && echo mysql || [ "$DB" = "sqlite" ] && echo sqlite || echo postgresql)"
+$PM add sequelize sequelize-cli
+# PostgreSQL: $PM add pg pg-hstore
+# MySQL:      $PM add mysql2
+# SQLite:     $PM add sqlite3
+# MongoDB:    $PM add mongoose  (Sequelize not used for MongoDB)
+npx sequelize-cli init
 ```
 
-Node.js + Drizzle (Hono):
+**Node.js + Prisma (Fastify / NestJS):**
 ```bash
-$PM add drizzle-orm drizzle-kit
+$PM add prisma @prisma/client
+npx prisma init --datasource-provider "$(
+  [ "$DB" = "mongodb" ] && echo mongodb ||
+  [ "$DB" = "mysql" ]   && echo mysql   ||
+  [ "$DB" = "sqlite" ]  && echo sqlite  ||
+  echo postgresql
+)"
+```
+
+**Node.js + Drizzle (Hono):**
+```bash
+$PM add drizzle-orm
 $PM add -D drizzle-kit
 ```
 
-Python + SQLAlchemy:
+**Python + SQLAlchemy:**
 ```bash
 pip install sqlalchemy[asyncio] alembic
-# For PostgreSQL: pip install asyncpg
-# For MySQL:      pip install aiomysql
-# For SQLite:     pip install aiosqlite
+# PostgreSQL: pip install asyncpg
+# MySQL:      pip install aiomysql
+# SQLite:     pip install aiosqlite
 ```
 
-Go + GORM:
+**Go + GORM:**
 ```bash
 go get gorm.io/gorm
 # PostgreSQL: go get gorm.io/driver/postgres
@@ -246,14 +309,33 @@ go get gorm.io/gorm
 ### Docker setup (skip if DOCKER = no)
 
 ```bash
-cp "assets/docker-templates/$([ "$FRAMEWORK" = "fastapi" ] || [ "$FRAMEWORK" = "django" ] || [ "$FRAMEWORK" = "flask" ] && echo python || ([ "$FRAMEWORK" = "gin" ] || [ "$FRAMEWORK" = "echo" ] && echo go) || echo node).dockerfile.template" "$APP_NAME/Dockerfile"
+ECOSYSTEM=$(
+  ([ "$FRAMEWORK" = "fastapi" ] || [ "$FRAMEWORK" = "django" ] || [ "$FRAMEWORK" = "flask" ]) && echo python ||
+  ([ "$FRAMEWORK" = "gin"    ] || [ "$FRAMEWORK" = "echo"   ]) && echo go ||
+  echo node
+)
 
-cp assets/docker-templates/docker-compose.yml.template "$APP_NAME/docker-compose.yml"
+if [ "$ECOSYSTEM" = "node" ]; then
+  cp "assets/docker-templates/node.dockerfile.dev.template"  "$APP_NAME/Dockerfile.Dev"
+  cp "assets/docker-templates/node.dockerfile.prod.template" "$APP_NAME/Dockerfile.Prod"
+  cp "assets/docker-templates/node.dockerfile.test.template" "$APP_NAME/Dockerfile.Test"
+else
+  cp "assets/docker-templates/${ECOSYSTEM}.dockerfile.template" "$APP_NAME/Dockerfile"
+fi
 
-# Replace placeholders
-sed -i "s/{{APP_NAME}}/$APP_NAME/g" "$APP_NAME/Dockerfile" "$APP_NAME/docker-compose.yml"
-sed -i "s/{{DB}}/$DB/g" "$APP_NAME/docker-compose.yml"
+cp assets/docker-templates/docker-compose.dev.yml.template  "$APP_NAME/docker-compose.dev.yml"
+cp assets/docker-templates/docker-compose.prod.yml.template "$APP_NAME/docker-compose.prod.yml"
+cp assets/docker-templates/docker-compose.test.yml.template "$APP_NAME/docker-compose.test.yml"
+
+# Replace {{APP_NAME}} placeholder in all Docker files
+for f in "$APP_NAME/Dockerfile.Dev" "$APP_NAME/Dockerfile.Prod" "$APP_NAME/Dockerfile.Test" \
+         "$APP_NAME/docker-compose.dev.yml" "$APP_NAME/docker-compose.prod.yml" "$APP_NAME/docker-compose.test.yml"; do
+  [ -f "$f" ] && sed -i "s/{{APP_NAME}}/$APP_NAME/g" "$f"
+done
 ```
+
+> **Credentials:** Docker Compose reads `DB_USER` and `DB_PASSWORD` from `.env`.
+> Add these to `.env` — do not hardcode them in compose files.
 
 ---
 
@@ -267,9 +349,9 @@ TEMPLATE_DIR="assets/api-templates/$FRAMEWORK"
 replace_placeholders() {
   local file="$1"
   sed -i "s/{{APP_NAME}}/$APP_NAME/g" "$file"
-  sed -i "s/{{ORM}}/$ORM/g" "$file"
-  sed -i "s/{{DB}}/$DB/g" "$file"
-  sed -i "s/{{AUTH}}/$AUTH/g" "$file"
+  sed -i "s/{{ORM}}/$ORM/g"           "$file"
+  sed -i "s/{{DB}}/$DB/g"             "$file"
+  sed -i "s/{{AUTH}}/$AUTH/g"         "$file"
   sed -i "s/{{FRAMEWORK}}/$FRAMEWORK/g" "$file"
 }
 ```
@@ -278,24 +360,31 @@ Install modules in dependency order (see SKILL.md Phase 5 for the full order).
 
 Wire each module:
 
-**Express example** — register route in `src/app.ts`:
-```typescript
-import healthRouter from './core/HealthCheck';
-import authRouter from './auth/AuthRouter';
-import usersRouter from './data/UsersCRUD';
-import swaggerPlugin from './docs/SwaggerDocs';
+**Express example** — register route in `src/app.js` using `#` path aliases:
+```javascript
+import healthRouter from '#core/health.js';
+import authRouter   from '#auth/router.js';
+import usersRouter  from '#data/users.js';
+import { setupSwagger } from '#docs/swagger.js';
 
 app.use('/health', healthRouter);
-app.use('/auth', authRouter);
-app.use('/users', usersRouter);
-swaggerPlugin(app);
+app.use('/auth',   authRouter);
+app.use('/users',  usersRouter);
+setupSwagger(app);
 ```
+
+> **Blog routing:** When `GRAPHQL = no`, wire `import blogRouter from '#data/blog.js'` and `app.use('/blog/posts', blogRouter)`.
+> When `GRAPHQL = yes`, skip the REST blog router — blog CRUD is served via `assets/api-templates/express/graphql/blog.resolvers.js.template` merged into the GraphQL schema.
+
+> **RBAC routes** (`/roles`, `/permissions`, `/role-users`, `/role-permissions`): Only wire when `RBAC = yes`.
+
+> **Notification module:** Uses `assets/api-templates/express/notifications/notification.service.js.template` — a console-log stub. Wire as `import { sendNotification } from '#notifications/notification.service.js'`.
 
 **FastAPI example** — include routers in `app/main.py`:
 ```python
 from app.core.health import router as health_router
-from app.auth.router import router as auth_router
-from app.data.users import router as users_router
+from app.auth.router  import router as auth_router
+from app.data.users   import router as users_router
 
 app.include_router(health_router)
 app.include_router(auth_router, prefix="/auth")
@@ -324,9 +413,13 @@ Print the route map to confirm:
 
 ```bash
 # Node.js (express-list-endpoints or similar)
-node -e "const app = require('./src/app'); require('express-list-endpoints')(app).forEach(r => console.log(r.methods.join(','), r.path))"
+node --input-type=module <<'EOF'
+import { createApp } from './src/app.js';
+import listEndpoints from 'express-list-endpoints';
+listEndpoints(createApp()).forEach(r => console.log(r.methods.join(','), r.path));
+EOF
 
-# FastAPI — route list is visible in /docs
+# FastAPI — route list is visible in /docs (auto-generated)
 
 # Go — Gin prints routes at startup with GIN_MODE=debug
 GIN_MODE=debug go run ./cmd/server
@@ -334,21 +427,28 @@ GIN_MODE=debug go run ./cmd/server
 
 Confirm these paths are present:
 - `GET /health`
-- `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `GET /auth/me`
-- `GET /users`, `POST /users`, `GET /users/:id`, `PUT /users/:id`, `DELETE /users/:id`
+- `POST /users/register`, `POST /users/login`, `POST /users/refresh-token`, `GET /users/me`
+- `GET /users`, `GET /users/:id`, `PUT /users/:id`
+- `GET /blog/posts`, `POST /blog/posts`, etc. — **only when `GRAPHQL = no`**
 - `POST /files/upload`, `GET /files/:id`
 - `POST /webhooks/:provider`
-- `GET /docs`, `GET /docs/json`
+- `GET /docs`
 - `WS /ws`, `GET /events`
+- `POST /graphql`, `GET /graphql` — **only when `GRAPHQL = yes`**
+- `/roles`, `/permissions`, `/role-users`, `/role-permissions` — **only when `RBAC = yes`**
 
 ---
 
 ## Phase 7 — Verify
 
-### Install and type-check
+### Install and check
 
 ```bash
-# Node.js
+# Express (JavaScript — no TypeScript compilation)
+$PM install
+$PM run lint         # eslint src
+
+# Fastify / Hono / NestJS (TypeScript)
 $PM install
 $PM run build        # tsc --noEmit
 $PM run lint         # eslint src
@@ -366,8 +466,11 @@ go vet ./...
 ### Start dev server
 
 ```bash
-# Express / Fastify / Hono
-$PM run dev          # nodemon / ts-node-dev
+# Express (JavaScript)
+$PM run dev          # nodemon src/server.js
+
+# Fastify / Hono
+$PM run dev          # ts-node-dev / tsx
 
 # NestJS
 $PM run start:dev
@@ -388,7 +491,11 @@ go run ./cmd/server/main.go
 ### Smoke-test all routes
 
 ```bash
-BASE_URL="http://localhost:$([ "$FRAMEWORK" = "gin" ] || [ "$FRAMEWORK" = "echo" ] && echo 8080 || ([ "$FRAMEWORK" = "fastapi" ] || [ "$FRAMEWORK" = "django" ] || [ "$FRAMEWORK" = "flask" ] && echo 8000) || echo 3000)"
+BASE_URL="http://localhost:$(
+  ([ "$FRAMEWORK" = "gin" ] || [ "$FRAMEWORK" = "echo" ]) && echo 8080 ||
+  ([ "$FRAMEWORK" = "fastapi" ] || [ "$FRAMEWORK" = "django" ] || [ "$FRAMEWORK" = "flask" ]) && echo 8000 ||
+  echo 3000
+)"
 
 bash scripts/test_endpoints.sh "$BASE_URL"
 ```
@@ -403,11 +510,11 @@ curl -s "$BASE_URL/docs" | grep -i swagger && echo "PASS" || echo "FAIL"
 ### Docker build (if DOCKER = yes)
 
 ```bash
-docker compose up --build -d
-sleep 3
-BASE_URL="http://localhost:$(grep HOST_PORT docker-compose.yml | head -1 | grep -oE '[0-9]+')"
+docker compose -f docker-compose.prod.yml up --build -d
+sleep 5
+BASE_URL="http://localhost:3000"
 bash scripts/test_endpoints.sh "$BASE_URL"
-docker compose down
+docker compose -f docker-compose.prod.yml down
 ```
 
 ---
@@ -415,19 +522,25 @@ docker compose down
 ## Failure protocols
 
 **Peer-dependency error (Node.js):**
+Present the conflict clearly, suggest the minimum version downgrade that resolves it, and ask the user to confirm before applying. Only use `--legacy-peer-deps` as a last resort after the user confirms:
 ```bash
-# Try with --legacy-peer-deps only after confirming the conflict with the user
+# Only after user confirmation — explain the conflict first
 $PM install --legacy-peer-deps
 ```
 
 **DB connection refused:**
 - Check that the DB service is running: `docker ps` or `pg_isready -h localhost`
-- Verify `.env` DB_URL matches the running service
+- Verify `.env` DATABASE_URL matches the running service
 - Offer `DB = sqlite` fallback if user cannot run the DB service locally
 
-**TypeScript compile error:**
+**TypeScript compile error (Fastify / Hono / NestJS — does not apply to Express):**
 - Read the error, fix the source file, re-run `tsc --noEmit`
 - Never add `// @ts-ignore` or `// @ts-nocheck` without a documented reason
+
+**`#` alias resolution error (Express):**
+- Confirm `package.json` has `"type": "module"` and the `imports` map is present
+- Node.js 18+ supports subpath imports natively — no extra packages needed
+- Re-run `node --input-type=module` to test a specific import
 
 **Python import error:**
 - Confirm the virtual environment is active: `which python` should point to `.venv/bin/python`
@@ -438,7 +551,7 @@ $PM install --legacy-peer-deps
 - Read the compile error and fix the source file
 
 **Swagger UI blank / routes missing:**
-- Confirm all routers are registered before the Swagger plugin initializes
+- Confirm all routers are registered before the Swagger plugin initialises
 - NestJS: confirm `@nestjs/swagger` `SwaggerModule.setup()` is called after all modules are imported
 - FastAPI: routes auto-register — check that all routers are included in `app.include_router()`
 - Gin: confirm `swag init` was run and `docs` package is imported

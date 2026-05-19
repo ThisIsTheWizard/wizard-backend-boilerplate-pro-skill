@@ -2,7 +2,7 @@
   "name": "wizard-backend-boilerplate-pro",
   "displayName": "Wizard Backend Boilerplate Pro",
   "version": "1.0.0",
-  "description": "Scaffold production-ready backend APIs with 28 wired modules, database integration, managed or custom auth, Docker, and Swagger docs — supports 9 frameworks across Node.js, Python, and Go.",
+  "description": "Scaffold production-ready backend APIs with up to 28 wired modules, database integration, managed or custom auth, optional RBAC, GraphQL, three-environment Docker, and Swagger docs — supports 9 frameworks across Node.js, Python, and Go.",
   "author": {
     "name": "The Wizard",
     "email": "sheikhisthewizard@gmail.com"
@@ -19,9 +19,10 @@
   ],
   "stats": {
     "frameworks": 9,
-    "modules": 28,
+    "modulesAlwaysOn": 19,
+    "modulesMax": 28,
     "databases": 5,
-    "authStrategies": 7
+    "authStrategies": 8
   },
   "compatibility": {
     "platforms": [
