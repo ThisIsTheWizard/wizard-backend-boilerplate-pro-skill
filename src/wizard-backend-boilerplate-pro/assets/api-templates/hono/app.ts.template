@@ -1,0 +1,35 @@
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { logger } from 'hono/logger';
+import { secureHeaders } from 'hono/secure-headers';
+import { rateLimiter } from 'hono-rate-limiter';
+import { healthRoutes } from './core/health';
+import { usersRoutes } from './routes/users';
+import { blogRoutes } from './routes/blog';
+
+export function createApp() {
+  const app = new Hono();
+
+  app.use('*', secureHeaders());
+  app.use('*', logger());
+  app.use('*', cors({ origin: process.env.CORS_ORIGINS?.split(',') ?? '*' }));
+  app.use(
+    '*',
+    rateLimiter({
+      windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS ?? '60000', 10),
+      limit: parseInt(process.env.RATE_LIMIT_MAX ?? '100', 10),
+      keyGenerator: (c) => c.req.header('x-forwarded-for') ?? 'unknown',
+    }),
+  );
+
+  app.route('/', healthRoutes);
+  app.route('/users', usersRoutes);
+  app.route('/blog/posts', blogRoutes);
+
+  app.onError((err, c) => {
+    console.error('[ErrorHandler]', err);
+    return c.json({ error: err.message ?? 'Internal server error', success: false }, 500);
+  });
+
+  return app;
+}

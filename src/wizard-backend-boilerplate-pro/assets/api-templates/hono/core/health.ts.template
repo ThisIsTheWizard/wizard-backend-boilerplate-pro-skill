@@ -1,0 +1,13 @@
+import { Hono } from 'hono';
+
+const startTime = Date.now();
+
+export const healthRoutes = new Hono();
+
+healthRoutes.get('/', (c) =>
+  c.json({
+    status: 'ok',
+    uptime: Math.floor((Date.now() - startTime) / 1000),
+    env: process.env.NODE_ENV ?? 'development',
+  }),
+);

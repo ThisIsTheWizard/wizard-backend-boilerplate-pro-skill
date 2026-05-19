@@ -1,0 +1,45 @@
+import { Hono } from 'hono';
+import { requireAuth } from '../auth/provider';
+
+export const usersRoutes = new Hono();
+
+// GET /users
+usersRoutes.get('/', requireAuth, async (c) => {
+  const page = parseInt(c.req.query('page') ?? '1', 10);
+  const pageSize = Math.min(parseInt(c.req.query('pageSize') ?? '20', 10), 100);
+  const search = c.req.query('search');
+  // TODO: ORM query (Drizzle: db.select().from(users).limit(pageSize).offset((page-1)*pageSize))
+  return c.json({ data: [], meta: { page, pageSize, total: 0, hasNext: false }, success: true });
+});
+
+// GET /users/me
+usersRoutes.get('/me', requireAuth, async (c) => {
+  const userId = c.get('userId' as any);
+  // TODO: db.select().from(users).where(eq(users.id, userId)).limit(1)
+  return c.json({ data: { id: userId }, success: true });
+});
+
+// GET /users/:id
+usersRoutes.get('/:id', requireAuth, async (c) => {
+  const id = c.req.param('id');
+  // TODO: db lookup
+  return c.json({ error: 'User not found', success: false }, 404);
+});
+
+// POST /users
+usersRoutes.post('/', async (c) => {
+  const body = await c.req.json<{ email: string; password: string }>();
+  if (!body.email || !body.password) {
+    return c.json({ error: 'email and password are required', success: false }, 400);
+  }
+  // TODO: hash password, db insert
+  return c.json({ data: { id: 'new-id', email: body.email }, success: true }, 201);
+});
+
+// PUT /users/:id
+usersRoutes.put('/:id', requireAuth, async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  // TODO: verify ownership, db update
+  return c.json({ data: { id, ...body }, success: true });
+});

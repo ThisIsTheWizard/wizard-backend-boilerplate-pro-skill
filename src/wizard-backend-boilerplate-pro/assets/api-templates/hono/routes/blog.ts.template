@@ -1,0 +1,71 @@
+/**
+ * Blog REST routes — used when GRAPHQL=no.
+ */
+import { Hono } from 'hono';
+import { requireAuth } from '../auth/provider';
+
+export const blogRoutes = new Hono();
+
+// GET /blog/posts
+blogRoutes.get('/', async (c) => {
+  const page = parseInt(c.req.query('page') ?? '1', 10);
+  const pageSize = Math.min(parseInt(c.req.query('pageSize') ?? '20', 10), 100);
+  const status = c.req.query('status');
+  // TODO: Drizzle: db.select().from(posts).where(status ? eq(posts.status, status) : undefined)
+  return c.json({ data: [], meta: { page, pageSize, total: 0, hasNext: false }, success: true });
+});
+
+// GET /blog/posts/slug/:slug — must be before /:id to avoid shadowing
+blogRoutes.get('/slug/:slug', async (c) => {
+  const slug = c.req.param('slug');
+  // TODO: db.select().from(posts).where(eq(posts.slug, slug)).limit(1)
+  return c.json({ error: 'Post not found', success: false }, 404);
+});
+
+// GET /blog/posts/:id
+blogRoutes.get('/:id', async (c) => {
+  const id = c.req.param('id');
+  return c.json({ error: 'Post not found', success: false }, 404);
+});
+
+// POST /blog/posts
+blogRoutes.post('/', requireAuth, async (c) => {
+  const body = await c.req.json<{ title: string; content: string; excerpt?: string; tags?: string[]; status?: string }>();
+  if (!body.title || !body.content) {
+    return c.json({ error: 'title and content are required', success: false }, 400);
+  }
+  const slug = body.title.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
+  // TODO: db insert
+  return c.json({
+    data: { id: 'new-id', slug, tags: body.tags ?? [], status: body.status ?? 'draft', ...body },
+    success: true,
+  }, 201);
+});
+
+// PUT /blog/posts/:id
+blogRoutes.put('/:id', requireAuth, async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  // TODO: verify ownership, db update
+  return c.json({ data: { id, ...body }, success: true });
+});
+
+// PATCH /blog/posts/:id/publish
+blogRoutes.patch('/:id/publish', requireAuth, async (c) => {
+  const id = c.req.param('id');
+  // TODO: db update status='published', publishedAt=new Date()
+  return c.json({ data: { id, status: 'published' }, success: true });
+});
+
+// PATCH /blog/posts/:id/unpublish
+blogRoutes.patch('/:id/unpublish', requireAuth, async (c) => {
+  const id = c.req.param('id');
+  return c.json({ data: { id, status: 'draft' }, success: true });
+});
+
+// DELETE /blog/posts/:id
+blogRoutes.delete('/:id', requireAuth, async (c) => {
+  const id = c.req.param('id');
+  // TODO: db update status='archived'
+  return c.json({ data: { deleted: true, id }, success: true });
+});
