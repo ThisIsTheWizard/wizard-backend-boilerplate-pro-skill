@@ -1,14 +1,16 @@
-# docker-compose.yml — {{APP_NAME}}
-# Starts: API server + database + Redis
-# Usage: docker compose up --build
+# docker-compose.prod.yml — {{APP_NAME}}
+# Optimised production environment.
+# Usage: docker compose -f docker-compose.prod.yml up --build -d
+#
+# Set DB_USER, DB_PASSWORD, and all required app env vars in your .env file.
 
 services:
   api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.Prod
     ports:
-      - "{{HOST_PORT}}:{{CONTAINER_PORT}}"
+      - "3000:3000"
     env_file:
       - .env
     environment:
@@ -23,71 +25,70 @@ services:
       - app-network
 
   # ── PostgreSQL ───────────────────────────────────────────────────────────────
-  # Uncomment if DB = postgresql or mysql
   db:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: {{APP_NAME}}_prod
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_prod_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
     networks:
       - app-network
 
-  # ── MySQL (uncomment if DB = mysql) ───────────────────────────────────────────
+  # ── MySQL (uncomment if DB = mysql) ──────────────────────────────────────────
   # db:
   #   image: mysql:8.0
   #   environment:
   #     MYSQL_DATABASE: {{APP_NAME}}_prod
-  #     MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-changeme}
+  #     MYSQL_USER: ${DB_USER}
+  #     MYSQL_PASSWORD: ${DB_PASSWORD}
+  #     MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
   #   volumes:
-  #     - mysql_data:/var/lib/mysql
+  #     - mysql_prod_data:/var/lib/mysql
   #   healthcheck:
   #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
   #     interval: 10s
   #     timeout: 5s
   #     retries: 5
-  #   networks:
-  #     - app-network
 
-  # ── MongoDB (uncomment if DB = mongodb) ───────────────────────────────────────
+  # ── MongoDB (uncomment if DB = mongodb) ──────────────────────────────────────
   # db:
   #   image: mongo:7.0
   #   environment:
   #     MONGO_INITDB_DATABASE: {{APP_NAME}}_prod
   #   volumes:
-  #     - mongo_data:/data/db
+  #     - mongo_prod_data:/data/db
   #   healthcheck:
   #     test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
   #     interval: 10s
   #     timeout: 5s
   #     retries: 5
-  #   networks:
-  #     - app-network
 
   redis:
     image: redis:7-alpine
     volumes:
-      - redis_data:/data
+      - redis_prod_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
     networks:
       - app-network
 
 volumes:
-  postgres_data:
-  # mysql_data:
-  # mongo_data:
-  redis_data:
+  postgres_prod_data:
+  # mysql_prod_data:
+  # mongo_prod_data:
+  redis_prod_data:
 
 networks:
   app-network:
