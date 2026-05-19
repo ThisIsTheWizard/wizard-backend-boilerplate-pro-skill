@@ -1,0 +1,49 @@
+import asyncio
+import json
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from typing import Any
+
+router = APIRouter()
+
+
+class ConnectionManager:
+    def __init__(self):
+        self._connections: list[WebSocket] = []
+
+    async def connect(self, ws: WebSocket) -> None:
+        await ws.accept()
+        self._connections.append(ws)
+
+    def disconnect(self, ws: WebSocket) -> None:
+        self._connections.remove(ws)
+
+    async def broadcast(self, data: Any) -> None:
+        payload = json.dumps(data) if not isinstance(data, str) else data
+        dead = []
+        for ws in self._connections:
+            try:
+                await ws.send_text(payload)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self._connections.remove(ws)
+
+    @property
+    def count(self) -> int:
+        return len(self._connections)
+
+
+manager = ConnectionManager()
+
+
+@router.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    await websocket.send_json({"event": "connected", "clients": manager.count})
+    try:
+        while True:
+            data = await websocket.receive_json()
+            await manager.broadcast({"event": "message", "data": data})
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        await manager.broadcast({"event": "disconnected", "clients": manager.count})

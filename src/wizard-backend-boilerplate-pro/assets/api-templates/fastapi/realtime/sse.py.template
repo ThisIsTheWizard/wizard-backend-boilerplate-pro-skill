@@ -1,0 +1,34 @@
+import asyncio
+import json
+from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
+from typing import AsyncGenerator
+
+router = APIRouter()
+
+
+async def _event_stream(channel: str) -> AsyncGenerator[str, None]:
+    yield f"data: {json.dumps({'event': 'connected', 'channel': channel})}\n\n"
+    try:
+        while True:
+            # Replace with real event source (Redis pub/sub, DB polling, etc.)
+            await asyncio.sleep(30)
+            yield f"data: {json.dumps({'event': 'heartbeat'})}\n\n"
+    except asyncio.CancelledError:
+        pass
+
+
+@router.get("")
+async def server_sent_events(channel: str = "default"):
+    """
+    GET /events?channel=default — open an SSE stream.
+    Client receives newline-delimited JSON event objects.
+    """
+    return StreamingResponse(
+        _event_stream(channel),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

@@ -1,0 +1,45 @@
+"""
+Notification service — console-log stub for development.
+
+To send real emails, replace the stub block with:
+  - AWS SES:   boto3 SESClient
+  - SendGrid:  sendgrid.SendGridAPIClient
+  - Resend:    resend.Emails.send
+  - Postmark:  postmarkclient.emails.send_email
+
+Required env var when using a real provider: FROM_EMAIL
+"""
+import logging
+from jinja2 import Template
+
+logger = logging.getLogger(__name__)
+
+
+async def send_notification(*, event: str, to: str, data: dict) -> None:
+    """
+    Fetch the AuthTemplate by event key, compile it with the provided data,
+    and deliver it. In development, logs to stdout instead of sending.
+    """
+    # TODO: fetch template from DB
+    # template_row = await db.execute(select(AuthTemplate).where(AuthTemplate.event == event))
+    template_row = None
+
+    if not template_row:
+        logger.warning("No template found for event '%s'", event)
+        return
+
+    subject = Template(template_row.subject).render(**data)
+    body    = Template(template_row.body).render(**data)
+
+    # ── Stub: replace with your email provider ──────────────────────────────
+    import os
+    if os.getenv("ENV", "development") != "test":
+        logger.info(
+            "\n[Notification] ──────────────────────────────────\n"
+            "  To:      %s\n"
+            "  Subject: %s\n"
+            "  Body:    %.200s...\n"
+            "─────────────────────────────────────────────────",
+            to, subject, body,
+        )
+    # ───────────────────────────────────────────────────────────────────────

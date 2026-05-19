@@ -1,0 +1,118 @@
+"""
+Blog REST routes — used when GRAPHQL=no.
+When GRAPHQL=yes, use a Strawberry resolver instead of this file.
+"""
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from datetime import datetime
+from typing import Optional
+import re
+
+from app.auth.provider import require_auth
+
+router = APIRouter()
+
+
+# ─── Schemas ─────────────────────────────────────────────────────────────────
+
+class PostResponse(BaseModel):
+    id: str
+    title: str
+    slug: str
+    content: str
+    excerpt: Optional[str] = None
+    status: str
+    tags: list[str] = []
+    author_id: str
+    published_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CreatePostRequest(BaseModel):
+    title: str
+    content: str
+    excerpt: Optional[str] = None
+    tags: list[str] = []
+    status: str = "draft"
+
+
+class UpdatePostRequest(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    excerpt: Optional[str] = None
+    tags: Optional[list[str]] = None
+    status: Optional[str] = None
+
+
+class PaginatedPosts(BaseModel):
+    data: list[PostResponse]
+    meta: dict
+
+
+# ─── Routes ──────────────────────────────────────────────────────────────────
+
+@router.get("/", response_model=PaginatedPosts, tags=["blog"])
+async def list_posts(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+):
+    # TODO: db query with filters, pagination
+    return {"data": [], "meta": {"page": page, "page_size": page_size, "total": 0, "has_next": False}}
+
+
+@router.get("/slug/{slug}", response_model=PostResponse, tags=["blog"])
+async def get_post_by_slug(slug: str):
+    # TODO: db.query(Post).filter(Post.slug == slug).first()
+    raise HTTPException(status_code=404, detail="Post not found")
+
+
+@router.get("/{post_id}", response_model=PostResponse, tags=["blog"])
+async def get_post(post_id: str):
+    # TODO: db.query(Post).filter(Post.id == post_id).first()
+    raise HTTPException(status_code=404, detail="Post not found")
+
+
+@router.post("/", response_model=PostResponse, status_code=201, tags=["blog"])
+async def create_post(body: CreatePostRequest, author_id: str = Depends(require_auth)):
+    slug = re.sub(r"[^a-z0-9\s-]", "", body.title.lower().strip())
+    slug = re.sub(r"\s+", "-", slug)
+    now = datetime.utcnow()
+    # TODO: db.add(Post(...)); db.commit()
+    return PostResponse(
+        id="new-id", title=body.title, slug=slug, content=body.content,
+        excerpt=body.excerpt, status=body.status, tags=body.tags,
+        author_id=author_id, created_at=now, updated_at=now,
+    )
+
+
+@router.put("/{post_id}", response_model=PostResponse, tags=["blog"])
+async def update_post(
+    post_id: str,
+    body: UpdatePostRequest,
+    _: str = Depends(require_auth),
+):
+    # TODO: verify ownership, then update
+    raise HTTPException(status_code=404, detail="Post not found")
+
+
+@router.patch("/{post_id}/publish", tags=["blog"])
+async def publish_post(post_id: str, _: str = Depends(require_auth)):
+    # TODO: db update status='published', published_at=now
+    return {"data": {"id": post_id, "status": "published"}, "success": True}
+
+
+@router.patch("/{post_id}/unpublish", tags=["blog"])
+async def unpublish_post(post_id: str, _: str = Depends(require_auth)):
+    # TODO: db update status='draft', published_at=None
+    return {"data": {"id": post_id, "status": "draft"}, "success": True}
+
+
+@router.delete("/{post_id}", tags=["blog"])
+async def delete_post(post_id: str, _: str = Depends(require_auth)):
+    # TODO: db update status='archived'
+    return {"data": {"deleted": True, "id": post_id}, "success": True}
