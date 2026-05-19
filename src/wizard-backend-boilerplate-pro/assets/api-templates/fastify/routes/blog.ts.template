@@ -1,0 +1,99 @@
+/**
+ * Blog REST routes — used when GRAPHQL=no.
+ * When GRAPHQL=yes, use a Mercurius resolver instead.
+ */
+import type { FastifyInstance } from 'fastify';
+
+export async function blogRoutes(fastify: FastifyInstance) {
+  // GET /blog/posts
+  fastify.get(
+    '/',
+    {
+      schema: {
+        tags: ['blog'],
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'integer', default: 1 },
+            pageSize: { type: 'integer', default: 20 },
+            search: { type: 'string' },
+            status: { type: 'string', enum: ['draft', 'published', 'archived'] },
+          },
+        },
+      },
+    },
+    async (req) => {
+      const { page = 1, pageSize = 20 } = req.query as any;
+      // TODO: prisma.post.findMany({ where: { status: 'published' }, ... })
+      return { data: [], meta: { page, pageSize, total: 0, hasNext: false }, success: true };
+    },
+  );
+
+  // GET /blog/posts/slug/:slug
+  fastify.get('/slug/:slug', { schema: { tags: ['blog'] } }, async (_req, reply) => {
+    return reply.code(404).send({ error: 'Post not found', success: false });
+  });
+
+  // GET /blog/posts/:id
+  fastify.get('/:id', { schema: { tags: ['blog'] } }, async (_req, reply) => {
+    return reply.code(404).send({ error: 'Post not found', success: false });
+  });
+
+  // POST /blog/posts
+  fastify.post(
+    '/',
+    {
+      schema: {
+        tags: ['blog'],
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: 'object',
+          required: ['title', 'content'],
+          properties: {
+            title: { type: 'string' },
+            content: { type: 'string' },
+            excerpt: { type: 'string' },
+            tags: { type: 'array', items: { type: 'string' } },
+            status: { type: 'string', enum: ['draft', 'published'], default: 'draft' },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { title, content, excerpt, tags = [], status = 'draft' } = req.body as any;
+      const slug = title.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
+      // TODO: prisma.post.create(...)
+      return reply.code(201).send({
+        data: { id: 'new-id', title, slug, content, excerpt, tags, status },
+        success: true,
+      });
+    },
+  );
+
+  // PUT /blog/posts/:id
+  fastify.put('/:id', { schema: { tags: ['blog'], security: [{ bearerAuth: [] }] } }, async (req) => {
+    const { id } = req.params as any;
+    // TODO: verify ownership, prisma.post.update(...)
+    return { data: { id, ...req.body }, success: true };
+  });
+
+  // PATCH /blog/posts/:id/publish
+  fastify.patch('/:id/publish', { schema: { tags: ['blog'], security: [{ bearerAuth: [] }] } }, async (req) => {
+    const { id } = req.params as any;
+    // TODO: prisma.post.update({ where: { id }, data: { status: 'published', publishedAt: new Date() } })
+    return { data: { id, status: 'published' }, success: true };
+  });
+
+  // PATCH /blog/posts/:id/unpublish
+  fastify.patch('/:id/unpublish', { schema: { tags: ['blog'], security: [{ bearerAuth: [] }] } }, async (req) => {
+    const { id } = req.params as any;
+    return { data: { id, status: 'draft' }, success: true };
+  });
+
+  // DELETE /blog/posts/:id
+  fastify.delete('/:id', { schema: { tags: ['blog'], security: [{ bearerAuth: [] }] } }, async (req) => {
+    const { id } = req.params as any;
+    // TODO: prisma.post.update({ where: { id }, data: { status: 'archived' } })
+    return { data: { deleted: true, id }, success: true };
+  });
+}

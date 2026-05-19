@@ -1,0 +1,72 @@
+import type { FastifyInstance } from 'fastify';
+
+export async function usersRoutes(fastify: FastifyInstance) {
+  // GET /users
+  fastify.get(
+    '/',
+    {
+      schema: {
+        tags: ['users'],
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'integer', default: 1 },
+            pageSize: { type: 'integer', default: 20 },
+            search: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (req) => {
+      const { page = 1, pageSize = 20 } = req.query as any;
+      // TODO: ORM query (Prisma: prisma.user.findMany)
+      return { data: [], meta: { page, pageSize, total: 0, hasNext: false }, success: true };
+    },
+  );
+
+  // GET /users/me
+  fastify.get('/me', { schema: { tags: ['users'], security: [{ bearerAuth: [] }] } }, async (req) => {
+    // TODO: return (req as any).user
+    return { data: null, success: true };
+  });
+
+  // GET /users/:id
+  fastify.get('/:id', { schema: { tags: ['users'], security: [{ bearerAuth: [] }] } }, async (req, reply) => {
+    const { id } = req.params as any;
+    // TODO: prisma.user.findUnique({ where: { id } })
+    return reply.code(404).send({ error: 'User not found', success: false });
+  });
+
+  // POST /users
+  fastify.post(
+    '/',
+    {
+      schema: {
+        tags: ['users'],
+        body: {
+          type: 'object',
+          required: ['email', 'password'],
+          properties: {
+            email: { type: 'string', format: 'email' },
+            password: { type: 'string', minLength: 8 },
+            firstName: { type: 'string' },
+            lastName: { type: 'string' },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const { email } = req.body as any;
+      // TODO: hash password, prisma.user.create(...)
+      return reply.code(201).send({ data: { id: 'new-id', email }, success: true });
+    },
+  );
+
+  // PUT /users/:id
+  fastify.put('/:id', { schema: { tags: ['users'], security: [{ bearerAuth: [] }] } }, async (req) => {
+    const { id } = req.params as any;
+    // TODO: verify ownership, prisma.user.update(...)
+    return { data: { id, ...req.body }, success: true };
+  });
+}

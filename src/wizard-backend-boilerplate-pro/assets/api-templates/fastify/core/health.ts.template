@@ -1,0 +1,30 @@
+import type { FastifyInstance } from 'fastify';
+
+const startTime = Date.now();
+
+export async function healthRoutes(fastify: FastifyInstance) {
+  fastify.get(
+    '/',
+    {
+      schema: {
+        tags: ['health'],
+        summary: 'Health check',
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              status: { type: 'string' },
+              uptime: { type: 'number' },
+              env: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async () => ({
+      status: 'ok',
+      uptime: Math.floor((Date.now() - startTime) / 1000),
+      env: process.env.NODE_ENV ?? 'development',
+    }),
+  );
+}

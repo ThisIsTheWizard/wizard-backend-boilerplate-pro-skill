@@ -1,0 +1,40 @@
+import Fastify from 'fastify';
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
+import { healthRoutes } from './core/health';
+import { usersRoutes } from './routes/users';
+import { blogRoutes } from './routes/blog';
+
+export async function buildApp() {
+  const fastify = Fastify({ logger: true });
+
+  await fastify.register(helmet);
+  await fastify.register(cors, {
+    origin: process.env.CORS_ORIGINS?.split(',') ?? '*',
+  });
+  await fastify.register(rateLimit, {
+    max: parseInt(process.env.RATE_LIMIT_MAX ?? '100', 10),
+    timeWindow: parseInt(process.env.RATE_LIMIT_WINDOW_MS ?? '60000', 10),
+  });
+
+  await fastify.register(swagger, {
+    openapi: {
+      info: { title: '{{APP_NAME}}', version: '1.0.0' },
+      components: {
+        securitySchemes: {
+          bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        },
+      },
+    },
+  });
+  await fastify.register(swaggerUi, { routePrefix: '/docs' });
+
+  await fastify.register(healthRoutes);
+  await fastify.register(usersRoutes, { prefix: '/users' });
+  await fastify.register(blogRoutes, { prefix: '/blog/posts' });
+
+  return fastify;
+}
