@@ -24,8 +24,33 @@ shown here, see `references/frameworks/<choice>.md`.
 
 Collect all **seven answers** before running any commands. Never start Phase 2 early.
 
+### Banner
+
+Display this before asking Q1:
+
 ```
-Q1  Framework?
+╔══════════════════════════════════════════════════════════════════╗
+║  🧙  Wizard Backend Boilerplate Pro                             ║
+║  Answer 7 questions. Get a production-ready API in minutes.     ║
+╚══════════════════════════════════════════════════════════════════╝
+```
+
+### Presets
+
+If the user's request includes a **preset keyword**, pre-fill the answers below and skip those questions (only ask the ones still open):
+
+| Preset | FRAMEWORK | DB | AUTH | RBAC | GRAPHQL | DOCKER |
+|---|---|---|---|---|---|---|
+| `starter` | express | sqlite | jwt | no | no | no |
+| `saas` | express | postgres | jwt | yes | no | yes |
+| `edge` | hono | postgres | clerk | no | no | no |
+
+Example: "Create a saas backend called order-service" → pre-fills everything except APP_NAME; only ask Q5.
+
+### Questions
+
+```
+🧙 Choosing your weapon — which framework?
      1) Express       (Node.js / JavaScript)
      2) Fastify       (Node.js / TypeScript)
      3) NestJS        (Node.js / TypeScript)
@@ -36,7 +61,7 @@ Q1  Framework?
      8) Gin           (Go)
      9) Echo          (Go)
 
-Q2  Database + ORM?
+🧙 Summoning your data layer — database + ORM?
      First pick a database:
        1) PostgreSQL
        2) MySQL
@@ -57,7 +82,7 @@ Q2  Database + ORM?
      Present: "I'll use [ORM] for [DB]. Accept, or name a different ORM?"
      Accept override silently if the user names a compatible ORM.
 
-Q3  Auth strategy?
+🧙 Securing your kingdom — auth strategy?
      1) JWT           (default — stateless, access + refresh tokens)
      2) API Key       (simple service-to-service auth)
      3) Session       (cookie-based, stateful)
@@ -67,18 +92,19 @@ Q3  Auth strategy?
      7) Supabase      (PostgreSQL-based)
      8) None          (no auth, all routes public)
 
-Q4  Include Docker (Dockerfile.Dev/Prod/Test + docker-compose.dev/prod/test.yml)?
-     yes / no
-
-Q5  Project name?
+🧙 Naming your creation — project name?
      (no default — required)
 
-Q6  Include GraphQL endpoint alongside REST?
+🧙 Building your fortress — include Docker?
+     (Dockerfile.Dev/Prod/Test + docker-compose.dev/prod/test.yml)
+     yes / no
+
+🧙 Adding arcane power — GraphQL alongside REST?
      yes / no
      (If yes: Apollo/Mercurius/Strawberry/gqlgen per framework; POST /graphql added.
       Blog CRUD is served as GraphQL queries/mutations — REST /blog/posts routes are skipped.)
 
-Q7  Include RBAC (roles, permissions, role-users, role-permissions)?
+🧙 Granting access by role — include RBAC?
      yes / no
      (Only asked when AUTH = jwt | apikey | session. Providers manage roles internally.)
 ```
@@ -515,6 +541,56 @@ sleep 5
 BASE_URL="http://localhost:3000"
 bash scripts/test_endpoints.sh "$BASE_URL"
 docker compose -f docker-compose.prod.yml down
+```
+
+### Showcase output
+
+After all checks pass, print this block. Adjust the route table to only show routes that apply (omit RBAC rows when `RBAC=no`, omit `/graphql` when `GRAPHQL=no`, omit `/blog` rows when blog was skipped):
+
+```
+🧙 $APP_NAME is ready!
+
+┌──────────────────────────────────────────────────────────┐
+│  $APP_NAME                                    v1.0.0    │
+│  $BASE_URL                                              │
+├──────────┬───────────────────────────┬──────────────────┤
+│ Method   │ Route                     │ Auth required    │
+├──────────┼───────────────────────────┼──────────────────┤
+│ GET      │ /health                   │ public           │
+│ GET      │ /docs                     │ public           │
+├──────────┼───────────────────────────┼──────────────────┤
+│ POST     │ /users/register           │ public           │
+│ POST     │ /users/login              │ public           │
+│ POST     │ /users/refresh-token      │ public           │
+│ POST     │ /users/forgot-password    │ public           │
+│ GET      │ /users/me                 │ bearer token     │
+│ POST     │ /users/logout             │ bearer token     │
+│ GET      │ /users                    │ bearer token     │
+│ GET      │ /users/:id                │ bearer token     │
+│ PUT      │ /users/:id                │ bearer token     │
+├──────────┼───────────────────────────┼──────────────────┤
+│ GET      │ /blog/posts               │ public           │
+│ POST     │ /blog/posts               │ bearer token     │
+│ PATCH    │ /blog/posts/:id/publish   │ bearer token     │
+│ DELETE   │ /blog/posts/:id           │ bearer token     │
+├──────────┼───────────────────────────┼──────────────────┤  ← omit when RBAC=no
+│ GET      │ /roles                    │ bearer + role    │
+│ GET      │ /permissions              │ bearer + role    │
+│ POST     │ /role-users               │ bearer + admin   │
+├──────────┼───────────────────────────┼──────────────────┤  ← omit when GRAPHQL=no
+│ POST     │ /graphql                  │ mixed            │
+│ GET      │ /graphql                  │ public (sandbox) │
+└──────────┴───────────────────────────┴──────────────────┘
+
+Try it now:
+
+  curl -s $BASE_URL/health | jq
+
+  curl -s -X POST $BASE_URL/users/register \
+    -H "Content-Type: application/json" \
+    -d '{"email":"you@example.com","password":"Wizard123!"}' | jq
+
+  open $BASE_URL/docs
 ```
 
 ---
