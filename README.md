@@ -8,6 +8,48 @@ A Claude Code skill that scaffolds production-ready backend APIs in minutes. Ans
 
 > **Try it now:** In Claude Code, just say: *"Create a new Express API called my-api with PostgreSQL and JWT"*
 
+<!-- TODO: replace with animated GIF of the 7-question interview flow -->
+<!-- ![Wizard Backend Boilerplate Pro demo](docs/assets/demo.gif) -->
+
+## Routes you get out of the box
+
+```
+GET    /health                  → { status, version, uptime, db }
+GET    /docs                    → Swagger UI (OpenAPI 3.0)
+
+POST   /users/register          → { data: { user, access_token, refresh_token } }
+POST   /users/login             → { data: { user, access_token, refresh_token } }
+POST   /users/refresh-token     → new token pair
+POST   /users/forgot-password   → sends OTP email (always 200)
+POST   /users/verify-forgot-password → resets password
+GET    /users/me          🔒    → { data: { user, roles, permissions } }
+POST   /users/logout      🔒    → revokes token
+GET    /users             🔒    → paginated user list
+GET    /users/:id         🔒    → get user
+PUT    /users/:id         🔒    → update user
+
+GET    /blog/posts              → paginated posts (filterable by status, search)
+POST   /blog/posts        🔒    → create post
+GET    /blog/posts/:id          → get post
+PATCH  /blog/posts/:id/publish 🔒 → publish post
+DELETE /blog/posts/:id    🔒    → archive post
+
+─── with RBAC=yes ────────────────────────────────────────────────
+GET    /roles             🔒    → list roles
+GET    /permissions       🔒    → list permissions
+POST   /role-users        🔒    → assign role to user
+DELETE /role-users/:id    🔒    → remove role from user
+
+─── with GRAPHQL=yes ─────────────────────────────────────────────
+POST   /graphql                 → execute queries / mutations
+GET    /graphql                 → Apollo Sandbox (dev)
+```
+
+🔒 = bearer token required
+
+<!-- TODO: add Swagger UI screenshot -->
+<!-- ![Swagger UI](docs/assets/swagger.png) -->
+
 ## What it builds
 
 - **Up to 28 API modules** across 6 categories — 15 always-on + 4 real-time/cache (optional) + 4 Auth infrastructure (custom auth) + 4 RBAC (optional) + 1 GraphQL (optional)

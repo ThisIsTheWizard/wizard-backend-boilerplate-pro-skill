@@ -121,10 +121,10 @@ After scaffold completes, auto-generate:
 | 3 — ORM table README | ✅ done | Express→Sequelize, NestJS→Prisma, Hono→Drizzle |
 | 4 — Install instructions | ✅ done | Added Install section, 30-second hello world, Compatibility table |
 | 5 — Framework templates | ✅ done | NestJS (13), FastAPI (7), Fastify (5), Hono (5) — 51 total templates (was 19) |
-| 6 — Module catalog depth | pending | |
-| 7 — E2E CI | pending | |
-| 8 — Repo hygiene | pending | |
-| 9 — README visuals | pending | |
-| 10 — Examples dir | pending | |
-| 11 — Wizard theming | pending | |
-| 12 — Showcase command | pending | |
+| 6 — Module catalog depth | ✅ done | All 6 thin entries filled; CacheClient/BackgroundJob/WS/SSE moved to conditional |
+| 7 — E2E CI | ✅ done | validate-templates.yml — 4 parallel jobs (JS, TS, Python, Go); badge in README |
+| 8 — Repo hygiene | ✅ done | CHANGELOG.md, CONTRIBUTING.md, bug + feature issue templates |
+| 9 — README visuals | ✅ done | Full route table, curl demo, GIF/screenshot placeholder comments |
+| 10 — Examples dir | ✅ done | express-postgres-jwt, fastapi-postgres-clerk, gin-mongo-jwt (uncommitted) |
+| 11 — Wizard theming | ✅ done | ASCII banner, 3 presets, 🧙 question headers |
+| 12 — Showcase command | ✅ done | Route table + curl one-liners printed at end of Phase 7 |
