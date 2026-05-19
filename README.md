@@ -8,8 +8,7 @@ A Claude Code skill that scaffolds production-ready backend APIs in minutes. Ans
 
 > **Try it now:** In Claude Code, just say: *"Create a new Express API called my-api with PostgreSQL and JWT"*
 
-<!-- TODO: replace with animated GIF of the 7-question interview flow -->
-<!-- ![Wizard Backend Boilerplate Pro demo](docs/assets/demo.gif) -->
+![Wizard Backend Boilerplate Pro demo](docs/assets/demo.png)
 
 ## Routes you get out of the box
 
@@ -47,8 +46,7 @@ GET    /graphql                 → Apollo Sandbox (dev)
 
 🔒 = bearer token required
 
-<!-- TODO: add Swagger UI screenshot -->
-<!-- ![Swagger UI](docs/assets/swagger.png) -->
+![Swagger UI](docs/assets/swagger.png)
 
 ## What it builds
 
