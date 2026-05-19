@@ -1,0 +1,117 @@
+name: Validate Templates
+
+on:
+  push:
+    paths:
+      - 'src/wizard-backend-boilerplate-pro/assets/**'
+  pull_request:
+    paths:
+      - 'src/wizard-backend-boilerplate-pro/assets/**'
+
+jobs:
+  js:
+    name: JS templates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Syntax-check JS templates
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            cp "$f" /tmp/_check.js
+            if ! node --check /tmp/_check.js 2>&1; then
+              echo "FAILED: $f"
+              fail=1
+            fi
+          done < <(find src -name "*.js.template")
+          exit $fail
+
+  ts:
+    name: TS templates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install TypeScript
+        run: npm install -g typescript
+
+      - name: Syntax-check TS templates
+        run: |
+          mkdir -p /tmp/ts-validate
+          cat > /tmp/ts-validate/tsconfig.json << 'EOF'
+          {
+            "compilerOptions": {
+              "target": "ES2022",
+              "module": "NodeNext",
+              "moduleResolution": "NodeNext",
+              "noEmit": true,
+              "noResolve": true,
+              "skipLibCheck": true,
+              "allowSyntheticDefaultImports": true,
+              "esModuleInterop": true,
+              "strict": false
+            },
+            "include": ["*.ts"]
+          }
+          EOF
+
+          i=0
+          while IFS= read -r f; do
+            i=$((i+1))
+            cp "$f" "/tmp/ts-validate/${i}_$(basename "${f%.template}")"
+          done < <(find src -name "*.ts.template")
+
+          cd /tmp/ts-validate && tsc -p tsconfig.json
+
+  python:
+    name: Python templates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Syntax-check Python templates
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            cp "$f" /tmp/_check.py
+            if ! python3 -m py_compile /tmp/_check.py 2>&1; then
+              echo "FAILED: $f"
+              fail=1
+            fi
+          done < <(find src -name "*.py.template")
+          exit $fail
+
+  go:
+    name: Go templates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Syntax-check Go templates
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            if ! gofmt -e "$f" > /dev/null 2>&1; then
+              echo "FAILED: $f"
+              gofmt -e "$f"
+              fail=1
+            fi
+          done < <(find src -name "*.go.template")
+          exit $fail
